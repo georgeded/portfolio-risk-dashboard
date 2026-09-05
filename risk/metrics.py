@@ -150,3 +150,57 @@ def worst_windows(r: pd.Series, windows=(1, 5, 20)) -> list[dict]:
             "end": end.strftime("%Y-%m-%d"),
         })
     return out
+
+
+def risk_contributions(weights: np.ndarray, cov: np.ndarray) -> dict:
+    """Euler decomposition of portfolio volatility.
+
+    contribution_i = w_i * (cov w)_i / sigma and the contributions sum to sigma.
+    """
+    cov = np.asarray(cov, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    variance = float(w @ cov @ w)
+    sigma = math.sqrt(max(variance, 0.0))
+    if sigma == 0:
+        n = len(w)
+        return {"volatility": 0.0, "marginal": np.zeros(n), "contribution": np.zeros(n),
+                "share": np.full(n, 1 / n if n else 0.0)}
+    marginal = cov @ w / sigma
+    contribution = w * marginal
+    return {
+        "volatility": sigma,
+        "marginal": marginal,
+        "contribution": contribution,
+        "share": contribution / sigma,
+    }
+
+
+def annualize_cov(cov_daily: np.ndarray) -> np.ndarray:
+    return np.asarray(cov_daily) * TRADING_DAYS
+
+
+def concentration(weights: np.ndarray) -> dict:
+    w = np.abs(np.asarray(weights, dtype=float))
+    total = w.sum()
+    if total == 0:
+        return {"hhi": 0.0, "effective_positions": 0.0, "top1_weight": 0.0, "top3_weight": 0.0}
+    w = w / total
+    hhi = float((w ** 2).sum())
+    ordered = np.sort(w)[::-1]
+    return {
+        "hhi": hhi,
+        "effective_positions": 1 / hhi if hhi > 0 else 0.0,
+        "top1_weight": float(ordered[0]),
+        "top3_weight": float(ordered[:3].sum()),
+    }
+
+
+def stress_correlation(corr: np.ndarray, floor: float) -> np.ndarray:
+    stressed = np.maximum(np.asarray(corr, dtype=float), floor)
+    np.fill_diagonal(stressed, 1.0)
+    return stressed
+
+
+def cov_from_corr(corr: np.ndarray, stds: np.ndarray) -> np.ndarray:
+    d = np.diag(stds)
+    return d @ corr @ d
