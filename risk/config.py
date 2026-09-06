@@ -22,3 +22,26 @@ DOWNLOAD_YEARS = 6
 MAX_GAP_DAYS = 5
 
 ALLOWED_ORIGINS = [o for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o]
+
+# Macro factors used by the stress tests. Each position gets a beta to every
+# factor from one joint regression on daily returns.
+FACTORS = {
+    "market": "SPY",
+    "rates": "TLT",
+    "dollar": "UUP",
+}
+
+# Yahoo sector name to the SPDR sector ETF used as the factor for a sector crash.
+SECTOR_ETFS = {
+    "Technology": "XLK",
+    "Financial Services": "XLF",
+    "Healthcare": "XLV",
+    "Energy": "XLE",
+    "Consumer Cyclical": "XLY",
+    "Consumer Defensive": "XLP",
+    "Industrials": "XLI",
+    "Basic Materials": "XLB",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+}
