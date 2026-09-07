@@ -89,3 +89,28 @@ SCENARIOS = [
         "confidence": 0.99,
     },
 ]
+
+# Warning thresholds. Losses and drawdowns are negative fractions.
+THRESHOLDS = {
+    "max_position_weight": 0.15,
+    "top3_weight": 0.50,
+    "max_sector_weight": 0.40,
+    "min_effective_positions": 5,
+    "annualized_volatility": 0.30,
+    "max_drawdown": -0.20,
+    "cvar_95_daily": -0.03,
+    "average_correlation": 0.60,
+    "beta": 1.30,
+    "risk_share_vs_weight": 2.0,
+}
+
+# Risk meter: each component is scored 0 to 100 between a low and a high
+# anchor, then blended with the weights below.
+RISK_METER = {
+    "volatility": {"low": 0.10, "high": 0.40, "weight": 0.30},
+    "max_drawdown": {"low": 0.05, "high": 0.40, "weight": 0.20},
+    "cvar": {"low": 0.01, "high": 0.05, "weight": 0.20},
+    "concentration": {"low": 0.05, "high": 0.35, "weight": 0.15},
+    "correlation": {"low": 0.20, "high": 0.80, "weight": 0.15},
+}
+RISK_LEVELS = [(25, "Low"), (50, "Moderate"), (75, "High"), (101, "Very High")]
