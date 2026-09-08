@@ -107,3 +107,39 @@ def _csv_prices(tickers: list[str]) -> pd.DataFrame:
     if absent:
         raise DataError(f"Not in {config.PRICES_CSV}: {', '.join(absent)}")
     return df[tickers]
+
+
+def _check_stale(prices: pd.DataFrame) -> None:
+    # Without this, dropping incomplete rows would quietly end the window on
+    # the last day a delisted or halted ticker traded.
+    stale = []
+    for t in prices.columns:
+        last = prices[t].last_valid_index()
+        if last is None:
+            raise DataError(f"No price history for {t}")
+        if (prices.index > last).sum() > config.MAX_GAP_DAYS:
+            stale.append(f"{t} (last price {last:%Y-%m-%d})")
+    if stale:
+        raise DataError(f"No recent prices for {', '.join(stale)}. Remove them or check the symbols.")
+
+
+def load_prices(tickers: list[str], lookback_days: int) -> pd.DataFrame:
+    """Adjusted close for the last `lookback_days` trading days, one column per ticker.
+
+    Short gaps are filled forward so tickers on different exchange calendars
+    line up. Rows where any ticker is still missing are dropped.
+    """
+    tickers = list(dict.fromkeys(normalize_ticker(t) for t in tickers))
+    prices = _csv_prices(tickers) if config.PRICES_CSV else _yahoo_prices(tickers)
+    _check_stale(prices)
+    prices = prices.ffill(limit=config.MAX_GAP_DAYS).dropna()
+    if len(prices) < config.MIN_LOOKBACK_DAYS:
+        raise DataError(
+            f"Only {len(prices)} overlapping trading days, need {config.MIN_LOOKBACK_DAYS}"
+        )
+    return prices.iloc[-(lookback_days + 1):]
+
+
+def last_prices(tickers: list[str]) -> pd.Series:
+    prices = load_prices(tickers, config.MIN_LOOKBACK_DAYS)
+    return prices.iloc[-1]
