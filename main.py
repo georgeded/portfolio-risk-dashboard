@@ -43,6 +43,11 @@ def print_report(rep: dict):
     print(f"Concentration: HHI {c['hhi']:.3f}, {c['effective_positions']:.1f} effective positions, "
           f"largest sector {c['largest_sector']['sector']} {c['largest_sector']['weight'] * 100:.0f}%")
     print(f"Average pairwise correlation {rep['correlation']['average_pairwise']:.2f}")
+    print()
+    print("Stress tests")
+    for t in rep["stress_tests"]:
+        top = ", ".join(f"{p['ticker']} {p['share_of_loss'] * 100:.0f}%" for p in t["positions"][:3] if p["loss_pct"] < 0)
+        print(f"  {t['name']:26}{pct(t['portfolio_loss_pct']):>8}   {top}")
 
 
 def main():

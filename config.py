@@ -16,3 +16,70 @@ PRICES_CSV = os.environ.get("PRICES_CSV")
 CACHE_DIR = os.environ.get("CACHE_DIR", os.path.join(os.path.dirname(__file__), "cache"))
 CACHE_TTL_HOURS = float(os.environ.get("CACHE_TTL_HOURS", "12"))
 DOWNLOAD_YEARS = 6
+
+# Macro factors used by the stress tests. Each position gets a beta to every
+# factor from one joint regression on daily returns.
+FACTORS = {
+    "market": "SPY",
+    "rates": "TLT",
+    "dollar": "UUP",
+}
+
+# Yahoo sector name to the SPDR sector ETF used as the factor for a sector crash.
+SECTOR_ETFS = {
+    "Technology": "XLK",
+    "Financial Services": "XLF",
+    "Healthcare": "XLV",
+    "Energy": "XLE",
+    "Consumer Cyclical": "XLY",
+    "Consumer Defensive": "XLP",
+    "Industrials": "XLI",
+    "Basic Materials": "XLB",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+}
+
+# Shocks are fractional moves of the factor over the scenario. A position moves
+# by the sum of beta times shock across the shocked factors.
+SCENARIOS = [
+    {
+        "id": "market_crash",
+        "name": "Market crash",
+        "description": "The equity market falls 20% with rates and the dollar unchanged.",
+        "shocks": {"market": -0.20},
+    },
+    {
+        "id": "rate_shock",
+        "name": "Sharp interest rate move",
+        "description": "Yields jump and long Treasuries fall 10%, roughly a 100bp move.",
+        "shocks": {"rates": -0.10},
+    },
+    {
+        "id": "recession",
+        "name": "Recession",
+        "description": "Equities fall 30%, long Treasuries rally 10% and the dollar gains 5%.",
+        "shocks": {"market": -0.30, "rates": 0.10, "dollar": 0.05},
+    },
+    {
+        "id": "sector_crash",
+        "name": "Sector crash",
+        "description": "The portfolio's largest sector falls 25%.",
+        "shocks": {"sector": -0.25},
+    },
+    {
+        "id": "fx_move",
+        "name": "Large FX move",
+        "description": "The dollar falls 10% against other currencies.",
+        "shocks": {"dollar": -0.10},
+        "translation": True,
+    },
+    {
+        "id": "correlation_spike",
+        "name": "Correlations rise",
+        "description": "Every pairwise correlation rises to at least 0.8 and the portfolio has a bad ten days.",
+        "correlation_floor": 0.8,
+        "horizon_days": 10,
+        "confidence": 0.99,
+    },
+]

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from risk import data, metrics
+from risk import data, metrics, stress
 
 
 class InputError(Exception):
@@ -101,13 +101,18 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
     tickers, weights, portfolio_value = resolve_positions(positions, portfolio_value)
     infos = _enrich(positions, tickers)
     sectors = _sector_weights(infos, weights)
+    largest_sector = sectors[0]["sector"] if sectors else None
+    sector_etf = config.SECTOR_ETFS.get(largest_sector)
 
-    needed = list(dict.fromkeys(tickers + [benchmark]))
+    needed = list(dict.fromkeys(tickers + [benchmark] + list(config.FACTORS.values())
+                                + ([sector_etf] if sector_etf else [])))
     prices = data.load_prices(needed, lookback_days)
     rets = data.simple_returns(prices)
 
     asset_rets = rets[tickers]
     bench_rets = rets[benchmark]
+    factor_rets = rets[list(config.FACTORS.values())].rename(columns={v: k for k, v in config.FACTORS.items()})
+    sector_rets = rets[sector_etf] if sector_etf else None
     port_rets = pd.Series(asset_rets.values @ weights, index=asset_rets.index)
 
     dd = metrics.max_drawdown(port_rets)
@@ -209,6 +214,14 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
             "risk_share": share_by_ticker[t],
         })
 
+    currencies = [info["currency"] for info in infos]
+    stress_results, betas = stress.run_all(
+        tickers, weights, asset_rets, factor_rets, sector_rets, currencies,
+        base_currency, portfolio_value, largest_sector,
+    )
+    for row in position_rows:
+        row["factor_betas"] = {k: float(v) for k, v in betas.loc[row["ticker"]].items()}
+
     return {
         "as_of": prices.index[-1].strftime("%Y-%m-%d"),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -217,6 +230,8 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
             "end": rets.index[-1].strftime("%Y-%m-%d"),
             "trading_days": int(len(rets)),
             "benchmark": benchmark,
+            "factors": config.FACTORS,
+            "sector_factor": sector_etf,
         },
         "portfolio": {
             "value": portfolio_value,
@@ -229,5 +244,6 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
         "correlation": corr,
         "risk_contribution": risk_contribution,
         "positions": position_rows,
+        "stress_tests": stress_results,
         "series": _series(rets.index, port_rets, bench_rets),
     }
