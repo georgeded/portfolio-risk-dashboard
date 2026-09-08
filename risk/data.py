@@ -176,3 +176,46 @@ def ticker_info(ticker: str) -> dict:
     with open(path, "w") as f:
         json.dump(store, f, indent=1)
     return entry
+
+
+SEARCH_TYPES = {"EQUITY", "ETF", "INDEX", "MUTUALFUND"}
+_search_cache: dict[str, list[dict]] = {}
+
+
+def search(query: str, limit: int = 8) -> list[dict]:
+    """Tickers matching a name or symbol, for suggestions while typing."""
+    q = query.strip()
+    if not q:
+        return []
+    if config.PRICES_CSV:
+        columns = pd.read_csv(config.PRICES_CSV, nrows=0).columns[1:]
+        return [{"ticker": c.upper(), "name": c.upper(), "exchange": None, "type": None}
+                for c in columns if c.upper().startswith(q.upper())][:limit]
+
+    key = q.lower()
+    if key not in _search_cache:
+        try:
+            import yfinance as yf
+
+            quotes = yf.Search(q, max_results=limit * 2, news_count=0).quotes
+        except Exception:
+            return []
+        results = []
+        for item in quotes:
+            symbol = str(item.get("symbol") or "").upper()
+            if item.get("quoteType") not in SEARCH_TYPES or not TICKER_PATTERN.match(symbol):
+                continue
+            results.append({
+                "ticker": symbol,
+                "name": item.get("shortname") or item.get("longname") or symbol,
+                "exchange": item.get("exchDisp"),
+                "type": item.get("quoteType").lower(),
+            })
+        if len(_search_cache) > 500:
+            _search_cache.clear()
+        _search_cache[key] = results
+    return _search_cache[key][:limit]
+
+
+def simple_returns(prices: pd.DataFrame) -> pd.DataFrame:
+    return prices.pct_change().iloc[1:].replace([np.inf, -np.inf], np.nan).fillna(0.0)
