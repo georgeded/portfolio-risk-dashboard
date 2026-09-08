@@ -143,3 +143,36 @@ def load_prices(tickers: list[str], lookback_days: int) -> pd.DataFrame:
 def last_prices(tickers: list[str]) -> pd.Series:
     prices = load_prices(tickers, config.MIN_LOOKBACK_DAYS)
     return prices.iloc[-1]
+
+
+def ticker_info(ticker: str) -> dict:
+    """Name, sector and quote currency from Yahoo, cached on disk. Empty fields when offline."""
+    ticker = normalize_ticker(ticker)
+    path = _cache_path("info.json")
+    store = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            store = json.load(f)
+    if ticker in store:
+        return store[ticker]
+
+    entry = {"name": ticker, "sector": None, "currency": None}
+    if config.PRICES_CSV:
+        return entry
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(ticker).info or {}
+    except Exception:
+        info = {}
+    if not info.get("shortName") and not info.get("sector"):
+        return entry
+    entry = {
+        "name": info.get("shortName") or info.get("longName") or ticker,
+        "sector": info.get("sector"),
+        "currency": info.get("currency"),
+    }
+    store[ticker] = entry
+    with open(path, "w") as f:
+        json.dump(store, f, indent=1)
+    return entry
