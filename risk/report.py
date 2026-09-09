@@ -226,6 +226,7 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
         summary["annualized_volatility"], summary["max_drawdown"], downside["cvar_historical"],
         conc["hhi"], corr["average_pairwise"],
     )
+    warns = signals.warnings(summary, downside, conc, corr, contributions, position_rows)
 
     return {
         "as_of": prices.index[-1].strftime("%Y-%m-%d"),
@@ -245,6 +246,7 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
         },
         "summary": summary,
         "risk_meter": meter,
+        "warnings": warns,
         "downside": downside,
         "concentration": conc,
         "correlation": corr,

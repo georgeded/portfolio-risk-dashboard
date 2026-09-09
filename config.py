@@ -84,6 +84,20 @@ SCENARIOS = [
     },
 ]
 
+# Warning thresholds. Losses and drawdowns are negative fractions.
+THRESHOLDS = {
+    "max_position_weight": 0.15,
+    "top3_weight": 0.50,
+    "max_sector_weight": 0.40,
+    "min_effective_positions": 5,
+    "annualized_volatility": 0.30,
+    "max_drawdown": -0.20,
+    "cvar_95_daily": -0.03,
+    "average_correlation": 0.60,
+    "beta": 1.30,
+    "risk_share_vs_weight": 2.0,
+}
+
 # Risk meter: each component is scored 0 to 100 between a low and a high
 # anchor, then blended with the weights below.
 RISK_METER = {

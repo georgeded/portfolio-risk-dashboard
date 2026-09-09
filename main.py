@@ -50,6 +50,13 @@ def print_report(rep: dict):
     for t in rep["stress_tests"]:
         top = ", ".join(f"{p['ticker']} {p['share_of_loss'] * 100:.0f}%" for p in t["positions"][:3] if p["loss_pct"] < 0)
         print(f"  {t['name']:26}{pct(t['portfolio_loss_pct']):>8}   {top}")
+    print()
+    if rep["warnings"]:
+        print("Warnings")
+        for w in rep["warnings"]:
+            print(f"  [{w['level']}] {w['message']}")
+    else:
+        print("No warnings")
 
 
 def main():
