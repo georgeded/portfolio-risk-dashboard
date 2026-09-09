@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from risk import data, metrics, stress
+from risk import data, metrics, signals, stress
 
 
 class InputError(Exception):
@@ -222,6 +222,11 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
     for row in position_rows:
         row["factor_betas"] = {k: float(v) for k, v in betas.loc[row["ticker"]].items()}
 
+    meter = signals.risk_meter(
+        summary["annualized_volatility"], summary["max_drawdown"], downside["cvar_historical"],
+        conc["hhi"], corr["average_pairwise"],
+    )
+
     return {
         "as_of": prices.index[-1].strftime("%Y-%m-%d"),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -239,6 +244,7 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
             "position_count": len(tickers),
         },
         "summary": summary,
+        "risk_meter": meter,
         "downside": downside,
         "concentration": conc,
         "correlation": corr,

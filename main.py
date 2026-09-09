@@ -27,7 +27,9 @@ def pct(x, d=1, signed=True):
 def print_report(rep: dict):
     s = rep["summary"]
     d = rep["downside"]
+    m = rep["risk_meter"]
     print(f"As of {rep['as_of']}, {rep['window']['trading_days']} trading days, benchmark {s['benchmark']}")
+    print(f"Risk meter: {m['level']} ({m['score']:.0f}/100)")
     print()
     print(f"{'Return (ann.)':22}{pct(s['annualized_return']):>10}   {'Volatility (ann.)':22}{pct(s['annualized_volatility'], signed=False):>10}")
     sharpe = "n/a" if s["sharpe"] is None else f"{s['sharpe']:.2f}"
