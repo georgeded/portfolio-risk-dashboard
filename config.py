@@ -17,6 +17,8 @@ CACHE_DIR = os.environ.get("CACHE_DIR", os.path.join(os.path.dirname(__file__), 
 CACHE_TTL_HOURS = float(os.environ.get("CACHE_TTL_HOURS", "12"))
 DOWNLOAD_YEARS = 6
 
+ALLOWED_ORIGINS = [o for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o]
+
 # Macro factors used by the stress tests. Each position gets a beta to every
 # factor from one joint regression on daily returns.
 FACTORS = {
