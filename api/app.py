@@ -1,6 +1,6 @@
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,8 +94,43 @@ def thresholds():
             "levels": [{"below": cap, "level": name} for cap, name in config.RISK_LEVELS]}
 
 
+@app.get("/api/lookup/{ticker}")
+def lookup(ticker: str):
+    try:
+        price = data.last_prices([ticker])
+    except data.DataError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    info = data.ticker_info(ticker)
+    return {"ticker": ticker.upper(), **info, "last_price": float(price.iloc[0])}
+
+
 @app.post("/api/report")
 def report_post(req: ReportRequest):
+    return _run(req)
+
+
+@app.get("/api/report")
+def report_get(
+    tickers: str = Query(..., description="Comma separated, for example AAPL,MSFT,NVDA"),
+    weights: str | None = Query(None, description="Comma separated, same order as tickers"),
+    benchmark: str = config.DEFAULT_BENCHMARK,
+    lookback_days: int = config.DEFAULT_LOOKBACK_DAYS,
+    confidence: float = config.DEFAULT_CONFIDENCE,
+    portfolio_value: float | None = None,
+    base_currency: str = config.DEFAULT_BASE_CURRENCY,
+):
+    symbols = [t.strip() for t in tickers.split(",") if t.strip()]
+    ws = [float(w) for w in weights.split(",")] if weights else [None] * len(symbols)
+    if len(ws) != len(symbols):
+        raise HTTPException(status_code=400, detail="weights and tickers differ in length")
+    req = ReportRequest(
+        positions=[Position(ticker=t, weight=w) for t, w in zip(symbols, ws)],
+        benchmark=benchmark,
+        lookback_days=lookback_days,
+        confidence=confidence,
+        portfolio_value=portfolio_value,
+        base_currency=base_currency,
+    )
     return _run(req)
 
 
