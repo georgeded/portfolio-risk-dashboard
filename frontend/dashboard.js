@@ -1,0 +1,211 @@
+// Renders the report returned by POST /api/report. Nothing here computes risk,
+// the page only draws what the backend sends. RiskDashboard.render(report) can
+// be called with any report object, RiskDashboard.load(request) fetches one.
+var RiskDashboard = (function () {
+  var C = {
+    red: '#ae1f19', grey: '#9ca3af', greyDark: '#6b7280', ink: '#111827', line: '#eef0f2',
+    green: '#16a34a', amber: '#f59e0b', orange: '#ea580c', danger: '#dc2626', blue: '#2a78d6',
+    neutral: '#f0efec'
+  }
+  var LEVELS = { Low: C.green, Moderate: C.amber, High: C.orange, 'Very High': C.danger }
+  var LEVEL_PILL = { Low: 'green', Moderate: 'amber', High: 'orange', 'Very High': 'red' }
+  var state = { apiBase: '', report: null }
+
+  function pct(x, d) {
+    if (x === null || x === undefined || isNaN(x)) return '—'
+    return (x * 100).toFixed(d === undefined ? 1 : d) + '%'
+  }
+  function signedPct(x, d) {
+    if (x === null || x === undefined || isNaN(x)) return '—'
+    return (x >= 0 ? '+' : '') + pct(x, d)
+  }
+  function num(x, d) {
+    if (x === null || x === undefined || isNaN(x)) return '—'
+    return Number(x).toFixed(d === undefined ? 2 : d)
+  }
+  function money(x, cur) {
+    if (x === null || x === undefined || isNaN(x)) return '—'
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur || 'USD', maximumFractionDigits: 0 }).format(x)
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    })
+  }
+  function el(id) { return document.getElementById(id) }
+  function levelColor(level) { return LEVELS[level] || C.grey }
+
+  function renderHeader(r) {
+    el('rd-asof').textContent = r.as_of
+    el('rd-window').textContent = r.window.trading_days + ' trading days, ' + r.window.start + ' to ' + r.window.end
+    el('rd-bench-label').textContent = r.window.benchmark
+  }
+
+  function arcPath(cx, cy, rOuter, rInner, a0, a1) {
+    var s0 = Math.PI * (1 - a0), s1 = Math.PI * (1 - a1)
+    var x0 = cx + rOuter * Math.cos(s0), y0 = cy - rOuter * Math.sin(s0)
+    var x1 = cx + rOuter * Math.cos(s1), y1 = cy - rOuter * Math.sin(s1)
+    var x2 = cx + rInner * Math.cos(s1), y2 = cy - rInner * Math.sin(s1)
+    var x3 = cx + rInner * Math.cos(s0), y3 = cy - rInner * Math.sin(s0)
+    return 'M' + x0 + ' ' + y0 + ' A' + rOuter + ' ' + rOuter + ' 0 0 1 ' + x1 + ' ' + y1 +
+      ' L' + x2 + ' ' + y2 + ' A' + rInner + ' ' + rInner + ' 0 0 0 ' + x3 + ' ' + y3 + ' Z'
+  }
+
+  function renderMeter(r) {
+    var m = r.risk_meter
+    var color = levelColor(m.level)
+    var cx = 125, cy = 135, ro = 110, ri = 84
+    var bands = [[0, 0.25, C.green], [0.25, 0.5, C.amber], [0.5, 0.75, C.orange], [0.75, 1, C.danger]]
+    var gap = 0.008
+    var svg = '<svg viewBox="0 0 250 150" role="img" aria-label="Risk meter ' + esc(m.level) + '">'
+    bands.forEach(function (b) {
+      svg += '<path d="' + arcPath(cx, cy, ro, ri, b[0] + (b[0] ? gap : 0), b[1] - (b[1] < 1 ? gap : 0)) + '" fill="' + b[2] + '" opacity="0.28"/>'
+    })
+    var frac = Math.max(0, Math.min(1, m.score / 100))
+    svg += '<path d="' + arcPath(cx, cy, ro, ri, 0, Math.max(frac, 0.01)) + '" fill="' + color + '"/>'
+    var ang = Math.PI * (1 - frac)
+    var nx = cx + (ri - 10) * Math.cos(ang), ny = cy - (ri - 10) * Math.sin(ang)
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + nx + '" y2="' + ny + '" stroke="' + C.ink + '" stroke-width="3" stroke-linecap="round"/>'
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="' + C.ink + '"/>'
+    svg += '</svg>'
+    svg += '<div class="rd-gauge__level"><div class="rd-gauge__score" style="color:' + color + '">' + Math.round(m.score) + '</div><div class="rd-gauge__name" style="color:' + color + '">' + esc(m.level) + '</div></div>'
+    el('rd-gauge').innerHTML = svg
+
+    var pill = el('rd-level-pill')
+    pill.className = 'rd-pill rd-pill--' + (LEVEL_PILL[m.level] || 'grey')
+    pill.textContent = m.level + ' risk'
+
+    var fmt = { volatility: pct, max_drawdown: pct, cvar: pct, concentration: function (v) { return num(v, 3) }, correlation: function (v) { return num(v, 2) } }
+    el('rd-components').innerHTML = m.components.map(function (c) {
+      var cc = c.score < 25 ? C.green : c.score < 50 ? C.amber : c.score < 75 ? C.orange : C.danger
+      return '<div class="rd-comp"><div><span class="rd-comp__n">' + esc(c.name) + '</span><span class="rd-comp__v">' + (fmt[c.key] || num)(c.value) + '</span></div>' +
+        '<div class="rd-bar" title="Score ' + c.score + ' of 100, weight ' + pct(c.weight, 0) + '"><span style="width:' + c.score + '%; background:' + cc + '"></span></div>' +
+        '<div class="rd-comp__s">' + Math.round(c.score) + '</div></div>'
+    }).join('')
+  }
+
+  function tile(label, value, cls, note) {
+    return '<div class="rd-stat"><div class="rd-stat__l">' + esc(label) + '</div><div class="rd-stat__v ' + (cls || '') + '">' + value + '</div>' + (note ? '<div class="rd-stat__n">' + note + '</div>' : '') + '</div>'
+  }
+
+  function renderStats(r) {
+    var s = r.summary, d = r.downside, cur = r.portfolio.base_currency, v = r.portfolio.value
+    var conf = Math.round(d.confidence * 100)
+    var cls = function (x) { return x > 0 ? 'pos' : x < 0 ? 'neg' : '' }
+    el('rd-stats').innerHTML = [
+      tile('Return (annualized)', signedPct(s.annualized_return), cls(s.annualized_return), s.benchmark + ' ' + signedPct(s.benchmark_annualized_return)),
+      tile('Volatility (annualized)', pct(s.annualized_volatility), '', s.benchmark + ' ' + pct(s.benchmark_annualized_volatility)),
+      tile('Max drawdown', pct(s.max_drawdown), 'neg', esc(s.drawdown_peak_date) + ' to ' + esc(s.drawdown_trough_date) + (s.drawdown_recovery_date ? ', recovered' : ', not recovered')),
+      tile('Sharpe', num(s.sharpe), '', 'Current drawdown ' + pct(s.current_drawdown)),
+      tile('Beta to ' + s.benchmark, num(s.beta), '', 'Correlation ' + num(s.correlation_to_benchmark)),
+      tile('VaR ' + conf + ' (1 day)', pct(d.var_historical, 2), 'neg', v ? money(d.var_historical_value, cur) + ' historical' : 'historical'),
+      tile('CVaR ' + conf + ' (1 day)', pct(d.cvar_historical, 2), 'neg', v ? money(d.cvar_historical_value, cur) + ' historical' : 'historical'),
+      tile('Worst day', pct(d.worst_windows[0].return, 2), 'neg', esc(d.worst_windows[0].end) + (d.worst_windows[2] ? ', worst 20 days ' + pct(d.worst_windows[2].return) : ''))
+    ].join('')
+  }
+
+  function renderWarnings(r) {
+    var box = el('rd-warnings')
+    if (!r.warnings.length) {
+      box.innerHTML = '<div class="rd-ok">No thresholds crossed. Concentration, downside and market dependence are inside the limits.</div>'
+      return
+    }
+    var pill = { critical: 'red', warning: 'amber', info: 'info' }
+    box.innerHTML = r.warnings.map(function (w) {
+      return '<div class="rd-warn rd-warn--' + w.level + '"><span class="rd-pill rd-pill--' + pill[w.level] + '">' + w.level + '</span>' +
+        '<div><div class="rd-warn__t">' + esc(w.title) + '</div><div class="rd-warn__m">' + esc(w.message) + '</div></div></div>'
+    }).join('')
+  }
+
+  function renderPositions(r) {
+    var cur = r.portfolio.base_currency
+    el('rd-positions-body').innerHTML = r.positions.map(function (p) {
+      var ratio = p.weight ? p.risk_share / Math.abs(p.weight) : 0
+      return '<tr><td class="sym">' + esc(p.ticker) + '<small>' + esc(p.name) + '</small></td><td>' + esc(p.sector) + '</td><td>' + pct(p.weight) + '</td><td>' + (p.value === null ? '—' : money(p.value, cur)) + '</td>' +
+        '<td class="' + (p.period_return >= 0 ? 'pos' : 'neg') + '">' + signedPct(p.period_return) + '</td><td>' + pct(p.annualized_volatility) + '</td><td>' + pct(p.max_drawdown) + '</td><td>' + num(p.beta) + '</td><td>' + pct(p.var_historical, 2) + '</td>' +
+        '<td>' + pct(p.risk_share) + '</td><td class="' + (ratio > 1.2 ? 'flag' : '') + '">' + num(ratio, 2) + 'x</td></tr>'
+    }).join('')
+  }
+
+  function render(report) {
+    state.report = report
+    renderHeader(report)
+    renderMeter(report)
+    renderStats(report)
+    renderWarnings(report)
+    renderPositions(report)
+    el('rd-body').classList.remove('rd-loading')
+  }
+
+  // "AAPL 25, MSFT 20" or "AAPL:25" or "AAPL, MSFT" for equal weights.
+  function parsePositions(text) {
+    var out = []
+    text.split(/[,\n]+/).forEach(function (chunk) {
+      var parts = chunk.trim().split(/[\s:=]+/).filter(Boolean)
+      if (!parts.length) return
+      var pos = { ticker: parts[0].toUpperCase() }
+      if (parts[1] !== undefined) pos.weight = parseFloat(parts[1])
+      out.push(pos)
+    })
+    var withWeight = out.filter(function (p) { return p.weight !== undefined && !isNaN(p.weight) })
+    if (withWeight.length && withWeight.length !== out.length) throw new Error('Give every ticker a weight, or none of them')
+    return out
+  }
+
+  function showError(msg) {
+    var box = el('rd-error')
+    box.textContent = msg
+    box.classList.toggle('show', !!msg)
+  }
+
+  function load(request) {
+    el('rd-body').classList.add('rd-loading')
+    el('rd-run').disabled = true
+    showError('')
+    return fetch(state.apiBase + '/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    }).then(function (res) {
+      return res.json().then(function (body) {
+        if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail))
+        return body
+      })
+    }).then(function (report) {
+      render(report)
+      return report
+    }).catch(function (err) {
+      showError(err.message)
+      el('rd-body').classList.remove('rd-loading')
+      throw err
+    }).finally(function () {
+      el('rd-run').disabled = false
+    })
+  }
+
+  function requestFromForm() {
+    var value = parseFloat(String(el('rd-value').value).replace(/[^0-9.]/g, ''))
+    return {
+      positions: parsePositions(el('rd-positions').value),
+      benchmark: el('rd-benchmark').value.trim().toUpperCase() || 'SPY',
+      lookback_days: parseInt(el('rd-lookback').value, 10),
+      portfolio_value: isNaN(value) || value <= 0 ? null : value,
+      base_currency: el('rd-currency').value
+    }
+  }
+
+  function init(opts) {
+    state.apiBase = (opts && opts.apiBase) || ''
+    el('rd-form').addEventListener('submit', function (e) {
+      e.preventDefault()
+      try {
+        load(requestFromForm()).catch(function () {})
+      } catch (err) {
+        showError(err.message)
+      }
+    })
+    load(requestFromForm()).catch(function () {})
+  }
+
+  return { init: init, load: load, render: render, parsePositions: parsePositions, state: state }
+})()

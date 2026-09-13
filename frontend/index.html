@@ -1,1 +1,118 @@
-<!doctype html><title>Portfolio Risk Dashboard</title><p>Risk dashboard, see /docs
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio Risk Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="rd-shell">
+  <div class="rd-topbar">
+    <div class="rd-brand">Portfolio risk</div>
+    <a href="/docs" target="_blank" rel="noopener">API reference</a>
+  </div>
+
+  <div class="rd-card">
+    <div class="rd-head">
+      <div>
+        <h1 class="rd-h">Risk dashboard</h1>
+        <p class="rd-sub" style="margin-bottom:0;">Where the book is taking risk and what could hurt it. Enter tickers with weights, pick a window and run. <span class="rd-muted">Educational, not investment advice.</span></p>
+      </div>
+      <div class="rd-head-right">
+        <span class="rd-pill rd-pill--grey">As of <span id="rd-asof">&mdash;</span></span>
+        <span class="rd-pill rd-pill--grey" id="rd-window">&mdash;</span>
+      </div>
+    </div>
+    <form class="rd-form" id="rd-form">
+      <div class="rd-field rd-field--wide">
+        <label for="rd-positions">Positions</label>
+        <input id="rd-positions" value="AAPL 25, MSFT 20, NVDA 20, JPM 15, XOM 10, ASML 10" autocomplete="off" spellcheck="false">
+        <div class="rd-hint">Ticker and weight, comma separated. Weights are normalized. Leave weights out for an equal weight book.</div>
+      </div>
+      <div class="rd-field">
+        <label for="rd-benchmark">Benchmark</label>
+        <input id="rd-benchmark" value="SPY">
+      </div>
+      <div class="rd-field">
+        <label for="rd-lookback">Window</label>
+        <select id="rd-lookback">
+          <option value="126">6 months</option>
+          <option value="252" selected>1 year</option>
+          <option value="504">2 years</option>
+          <option value="756">3 years</option>
+          <option value="1250">5 years</option>
+        </select>
+      </div>
+      <div class="rd-field">
+        <label for="rd-value">Book value</label>
+        <input id="rd-value" value="100000" inputmode="decimal">
+      </div>
+      <div class="rd-field">
+        <label for="rd-currency">Base currency</label>
+        <select id="rd-currency">
+          <option value="USD" selected>USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+        </select>
+      </div>
+      <div class="rd-field">
+        <button class="rd-btn rd-btn--primary" type="submit" id="rd-run">Run</button>
+      </div>
+    </form>
+    <div class="rd-error" id="rd-error"></div>
+  </div>
+
+  <div id="rd-body" class="rd-loading">
+    <div class="rd-card">
+      <div class="rd-head">
+        <div>
+          <h2 class="rd-h2">Risk meter</h2>
+          <p class="rd-sub rd-sub--tight">One score for the whole book, from volatility, drawdown, downside tail, concentration and correlation.</p>
+        </div>
+        <span class="rd-pill rd-pill--grey" id="rd-level-pill">&mdash;</span>
+      </div>
+      <div class="rd-meter">
+        <div>
+          <div class="rd-gauge" id="rd-gauge"></div>
+          <div class="rd-gauge__ends"><span>Low</span><span>Very high</span></div>
+        </div>
+        <div id="rd-components"></div>
+      </div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Overview</h2>
+      <p class="rd-sub rd-sub--tight">Portfolio over the window, daily rebalanced to the entered weights. VaR and CVaR are one day at the confidence shown.</p>
+      <div class="rd-stats" id="rd-stats"></div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Warnings</h2>
+      <p class="rd-sub rd-sub--tight">Raised when concentration, downside or market dependence crosses a threshold.</p>
+      <div id="rd-warnings"></div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Positions</h2>
+      <p class="rd-sub rd-sub--tight">Every number behind the charts. Risk share above weight is flagged in red.</p>
+      <div class="rd-table-wrap">
+        <table class="rd-table">
+          <thead><tr><th>Symbol</th><th>Sector</th><th>Weight</th><th>Value</th><th>Return</th><th>Volatility</th><th>Max DD</th><th>Beta</th><th>VaR 95</th><th>Risk share</th><th>Risk / weight</th></tr></thead>
+          <tbody id="rd-positions-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="rd-foot">Prices from Yahoo Finance, adjusted for dividends and splits. Windows use trading days.</p>
+</div>
+<script src="/static/dashboard.js"></script>
+<script>
+  RiskDashboard.init({ apiBase: '' })
+</script>
+</body>
+</html>
