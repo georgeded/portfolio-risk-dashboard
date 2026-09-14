@@ -96,6 +96,21 @@
       <div id="rd-warnings"></div>
     </div>
 
+    <div class="rd-two">
+      <div class="rd-card">
+        <h2 class="rd-h2">Risk contribution</h2>
+        <p class="rd-sub rd-sub--tight">Share of portfolio volatility each position creates, next to its weight. A name whose risk share is well above its weight is doing more damage than its size suggests.</p>
+        <div class="rd-chart" id="rd-contrib-wrap"><canvas id="rd-contrib"></canvas></div>
+        <div class="rd-legend"><span><i style="background:#ae1f19"></i>Risk share</span><span><i style="background:#9ca3af"></i>Weight</span></div>
+      </div>
+      <div class="rd-card">
+        <h2 class="rd-h2">Correlation</h2>
+        <p class="rd-sub rd-sub--tight">Daily return correlation between positions. Red pairs move together, blue pairs offset each other.</p>
+        <div id="rd-heatmap"></div>
+        <div class="rd-heat__legend"><span>-1</span><div class="rd-heat__ramp"></div><span>+1</span><span id="rd-corr-note" style="margin-left:auto;"></span></div>
+      </div>
+    </div>
+
     <div class="rd-card">
       <h2 class="rd-h2">Positions</h2>
       <p class="rd-sub rd-sub--tight">Every number behind the charts. Risk share above weight is flagged in red.</p>

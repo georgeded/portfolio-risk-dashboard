@@ -9,6 +9,7 @@ var RiskDashboard = (function () {
   }
   var LEVELS = { Low: C.green, Moderate: C.amber, High: C.orange, 'Very High': C.danger }
   var LEVEL_PILL = { Low: 'green', Moderate: 'amber', High: 'orange', 'Very High': 'red' }
+  var charts = {}
   var state = { apiBase: '', report: null }
 
   function pct(x, d) {
@@ -34,6 +35,51 @@ var RiskDashboard = (function () {
   }
   function el(id) { return document.getElementById(id) }
   function levelColor(level) { return LEVELS[level] || C.grey }
+
+  // Chart.js defaults shared by every chart: hairline grid, no dashes, thin bars.
+  function baseOptions() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: C.ink, titleFont: { weight: '700' }, padding: 10, cornerRadius: 8 } },
+      scales: {
+        x: { grid: { color: C.line, lineWidth: 1, drawTicks: false }, border: { display: false }, ticks: { color: C.greyDark, font: { size: 11 } } },
+        y: { grid: { color: C.line, lineWidth: 1, drawTicks: false }, border: { display: false }, ticks: { color: C.greyDark, font: { size: 11 } } }
+      }
+    }
+  }
+
+  // Writes the value at the end of each bar for the datasets that ask for it.
+  var endLabels = {
+    id: 'endLabels',
+    afterDatasetsDraw: function (chart) {
+      var ctx = chart.ctx
+      chart.data.datasets.forEach(function (ds, di) {
+        if (!ds.endLabel) return
+        var meta = chart.getDatasetMeta(di)
+        ctx.save()
+        ctx.font = '700 11px ' + getComputedStyle(document.body).fontFamily
+        ctx.fillStyle = C.ink
+        ctx.textBaseline = 'middle'
+        meta.data.forEach(function (bar, i) {
+          var v = ds.data[i]
+          if (v === null || v === undefined) return
+          var x = bar.x
+          ctx.textAlign = v >= 0 ? 'left' : 'right'
+          x += v >= 0 ? 6 : -6
+          ctx.fillText(ds.endLabel(v), x, bar.y)
+        })
+        ctx.restore()
+      })
+    }
+  }
+
+  function destroy(key) {
+    if (!charts[key]) return
+    charts[key].destroy()
+    delete charts[key]
+  }
 
   function renderHeader(r) {
     el('rd-asof').textContent = r.as_of
@@ -117,6 +163,62 @@ var RiskDashboard = (function () {
     }).join('')
   }
 
+  function renderContribution(r) {
+    var rows = r.risk_contribution.positions
+    el('rd-contrib-wrap').style.height = Math.max(180, rows.length * 44 + 40) + 'px'
+    destroy('contrib')
+    var opts = baseOptions()
+    opts.indexAxis = 'y'
+    opts.layout = { padding: { right: 48 } }
+    opts.scales.x.ticks.callback = function (v) { return pct(v, 0) }
+    opts.scales.x.beginAtZero = true
+    opts.scales.y.grid.display = false
+    opts.scales.y.ticks.font = { size: 12, weight: '700' }
+    opts.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + pct(c.raw) } }
+    charts.contrib = new Chart(el('rd-contrib'), {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (p) { return p.ticker }),
+        datasets: [
+          { label: 'Risk share', data: rows.map(function (p) { return p.share }), backgroundColor: C.red, borderRadius: 4, maxBarThickness: 16, endLabel: function (v) { return pct(v, 0) } },
+          { label: 'Weight', data: rows.map(function (p) { return Math.abs(p.weight) }), backgroundColor: C.grey, borderRadius: 4, maxBarThickness: 16 }
+        ]
+      },
+      options: opts,
+      plugins: [endLabels]
+    })
+  }
+
+  function mix(a, b, t) {
+    var pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)]
+    var pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)]
+    var c = pa.map(function (x, i) { return Math.round(x + (pb[i] - x) * t) })
+    return 'rgb(' + c.join(',') + ')'
+  }
+  function corrColor(v) {
+    return v >= 0 ? mix(C.neutral, C.red, Math.min(1, v)) : mix(C.neutral, C.blue, Math.min(1, -v))
+  }
+
+  function renderHeatmap(r) {
+    var t = r.correlation.tickers, m = r.correlation.matrix
+    var n = t.length
+    var html = '<div class="rd-heat" style="grid-template-columns: 64px repeat(' + n + ', 1fr)">'
+    html += '<div></div>' + t.map(function (x) { return '<div class="rd-heat__h">' + esc(x) + '</div>' }).join('')
+    t.forEach(function (row, i) {
+      html += '<div class="rd-heat__r">' + esc(row) + '</div>'
+      t.forEach(function (col, j) {
+        var v = m[i][j]
+        var fg = Math.abs(v) > 0.55 ? '#fff' : C.ink
+        var label = i === j ? '' : num(v, 2)
+        html += '<div class="rd-heat__c" style="background:' + corrColor(v) + '; color:' + fg + '" title="' + esc(row) + ' vs ' + esc(col) + ': ' + num(v, 2) + '">' + label + '</div>'
+      })
+    })
+    html += '</div>'
+    el('rd-heatmap').innerHTML = html
+    var c = r.correlation
+    el('rd-corr-note').textContent = 'Average ' + num(c.average_pairwise) + (c.highest_pair ? ', highest ' + c.highest_pair.a + ' / ' + c.highest_pair.b + ' ' + num(c.highest_pair.value) : '')
+  }
+
   function renderPositions(r) {
     var cur = r.portfolio.base_currency
     el('rd-positions-body').innerHTML = r.positions.map(function (p) {
@@ -133,6 +235,8 @@ var RiskDashboard = (function () {
     renderMeter(report)
     renderStats(report)
     renderWarnings(report)
+    renderContribution(report)
+    renderHeatmap(report)
     renderPositions(report)
     el('rd-body').classList.remove('rd-loading')
   }
