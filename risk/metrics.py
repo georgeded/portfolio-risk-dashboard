@@ -102,3 +102,63 @@ def max_drawdown(r: pd.Series, start=None) -> dict:
 
 def _date(d) -> str | None:
     return pd.Timestamp(d).strftime("%Y-%m-%d") if d is not None else None
+
+
+def beta(r: pd.Series, market: pd.Series) -> float:
+    var = market.var(ddof=1)
+    if var == 0:
+        return 0.0
+    return float(r.cov(market) / var)
+
+
+def correlation(a: pd.Series, b: pd.Series) -> float:
+    c = a.corr(b)
+    return 0.0 if pd.isna(c) else float(c)
+
+
+def var_historical(r: pd.Series, confidence: float) -> float:
+    return float(np.quantile(r.values, 1 - confidence))
+
+
+def cvar_historical(r: pd.Series, confidence: float) -> float:
+    cut = var_historical(r, confidence)
+    tail = r[r <= cut]
+    return float(tail.mean()) if len(tail) else cut
+
+
+def var_parametric(r: pd.Series, confidence: float) -> float:
+    return float(r.mean() + r.std(ddof=1) * norm_ppf(1 - confidence))
+
+
+def cvar_parametric(r: pd.Series, confidence: float) -> float:
+    z = norm_ppf(1 - confidence)
+    return float(r.mean() - r.std(ddof=1) * norm_pdf(z) / (1 - confidence))
+
+
+def parametric_from_moments(mean: float, std: float, confidence: float, horizon_days: int = 1) -> dict:
+    z = norm_ppf(1 - confidence)
+    scale = math.sqrt(horizon_days)
+    m = mean * horizon_days
+    s = std * scale
+    return {
+        "var": m + s * z,
+        "cvar": m - s * norm_pdf(z) / (1 - confidence),
+    }
+
+
+def worst_windows(r: pd.Series, windows=(1, 5, 20)) -> list[dict]:
+    out = []
+    for w in windows:
+        if len(r) < w:
+            continue
+        rolled = (1 + r).rolling(w).apply(np.prod, raw=True) - 1
+        rolled = rolled.dropna()
+        end = rolled.idxmin()
+        start = r.index[r.index.get_loc(end) - w + 1]
+        out.append({
+            "days": w,
+            "return": float(rolled.min()),
+            "start": start.strftime("%Y-%m-%d"),
+            "end": end.strftime("%Y-%m-%d"),
+        })
+    return out
