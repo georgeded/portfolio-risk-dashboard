@@ -65,10 +65,10 @@ var RiskDashboard = (function () {
         meta.data.forEach(function (bar, i) {
           var v = ds.data[i]
           if (v === null || v === undefined) return
-          var x = bar.x
-          ctx.textAlign = v >= 0 ? 'left' : 'right'
-          x += v >= 0 ? 6 : -6
-          ctx.fillText(ds.endLabel(v), x, bar.y)
+          // Positive bars are labeled past their end, negative bars just right
+          // of the zero line so the text never runs into the axis labels.
+          ctx.textAlign = 'left'
+          ctx.fillText(ds.endLabel(v), (v >= 0 ? bar.x : bar.base) + 6, bar.y)
         })
         ctx.restore()
       })
@@ -109,10 +109,6 @@ var RiskDashboard = (function () {
     })
     var frac = Math.max(0, Math.min(1, m.score / 100))
     svg += '<path d="' + arcPath(cx, cy, ro, ri, 0, Math.max(frac, 0.01)) + '" fill="' + color + '"/>'
-    var ang = Math.PI * (1 - frac)
-    var nx = cx + (ri - 10) * Math.cos(ang), ny = cy - (ri - 10) * Math.sin(ang)
-    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + nx + '" y2="' + ny + '" stroke="' + C.ink + '" stroke-width="3" stroke-linecap="round"/>'
-    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="' + C.ink + '"/>'
     svg += '</svg>'
     svg += '<div class="rd-gauge__level"><div class="rd-gauge__score" style="color:' + color + '">' + Math.round(m.score) + '</div><div class="rd-gauge__name" style="color:' + color + '">' + esc(m.level) + '</div></div>'
     el('rd-gauge').innerHTML = svg
@@ -288,7 +284,8 @@ var RiskDashboard = (function () {
     destroy('stress')
     var opts = baseOptions()
     opts.indexAxis = 'y'
-    opts.layout = { padding: { left: 56, right: 56 } }
+    opts.layout = { padding: { right: 56 } }
+    opts.scales.x.grace = '8%'
     opts.scales.x.ticks.callback = function (x) { return pct(x, 0) }
     opts.scales.y.grid.display = false
     opts.scales.y.ticks.font = { size: 12, weight: '700' }

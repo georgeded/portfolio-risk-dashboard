@@ -72,7 +72,7 @@ body { margin: 0; background: #fff; color: var(--rd-ink); font-family: var(--rd-
 .rd-meter { display: grid; grid-template-columns: 250px 1fr; gap: 1.6rem; align-items: center; }
 .rd-gauge { position: relative; width: 250px; height: 150px; }
 .rd-gauge svg { width: 100%; height: 100%; overflow: visible; }
-.rd-gauge__level { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; }
+.rd-gauge__level { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; }
 .rd-gauge__score { font-size: 2.2rem; font-weight: 800; line-height: 1; }
 .rd-gauge__name { font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
 .rd-gauge__ends { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--rd-grey-light); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 6px; }
