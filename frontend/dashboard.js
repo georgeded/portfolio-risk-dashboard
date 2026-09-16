@@ -219,6 +219,113 @@ var RiskDashboard = (function () {
     el('rd-corr-note').textContent = 'Average ' + num(c.average_pairwise) + (c.highest_pair ? ', highest ' + c.highest_pair.a + ' / ' + c.highest_pair.b + ' ' + num(c.highest_pair.value) : '')
   }
 
+  function renderGrowth(r) {
+    var s = r.series
+    var labels = s.dates
+    var tickEvery = Math.max(1, Math.round(labels.length / 6))
+    destroy('growth')
+    destroy('drawdown')
+    var opts = baseOptions()
+    opts.interaction = { mode: 'index', intersect: false }
+    opts.scales.x.grid.display = false
+    opts.scales.x.ticks.maxRotation = 0
+    opts.scales.x.ticks.autoSkip = false
+    opts.scales.x.ticks.callback = function (v, i) { return i % tickEvery === 0 ? labels[i] : '' }
+    opts.scales.y.ticks.callback = function (v) { return num(v, 2) }
+    opts.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + num(c.raw, 3) } }
+    charts.growth = new Chart(el('rd-growth'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Portfolio', data: s.portfolio, borderColor: C.red, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.1 },
+          { label: r.window.benchmark, data: s.benchmark, borderColor: C.grey, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.1 }
+        ]
+      },
+      options: opts
+    })
+    var dopts = baseOptions()
+    dopts.interaction = { mode: 'index', intersect: false }
+    dopts.scales.x.grid.display = false
+    dopts.scales.x.ticks.display = false
+    dopts.scales.y.ticks.callback = function (v) { return pct(v, 0) }
+    dopts.scales.y.max = 0
+    dopts.plugins.tooltip.callbacks = { label: function (c) { return 'Drawdown ' + pct(c.raw, 2) } }
+    charts.drawdown = new Chart(el('rd-drawdown'), {
+      type: 'line',
+      data: { labels: labels, datasets: [{ label: 'Drawdown', data: s.drawdown, borderColor: C.red, backgroundColor: 'rgba(174,31,25,0.10)', fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.1 }] },
+      options: dopts
+    })
+  }
+
+  function weightRow(name, sub, weight, color) {
+    return '<div class="rd-wrow"><div class="rd-wrow__t">' + esc(name) + (sub ? '<span class="rd-wrow__n">' + esc(sub) + '</span>' : '') + '</div>' +
+      '<div class="rd-bar"><span style="width:' + Math.min(100, weight * 100) + '%; background:' + color + '"></span></div>' +
+      '<div class="rd-wrow__p">' + pct(weight, 1) + '</div></div>'
+  }
+
+  function renderConcentration(r) {
+    var c = r.concentration
+    el('rd-conc-stats').innerHTML = [
+      tile('Effective positions', num(c.effective_positions, 1), '', 'HHI ' + num(c.hhi, 3)),
+      tile('Top 3 weight', pct(c.top3_weight, 0), '', 'Largest ' + esc(c.top_position.ticker) + ' ' + pct(c.top_position.weight, 0))
+    ].join('')
+    var byTicker = {}
+    r.positions.forEach(function (p) { byTicker[p.ticker] = p })
+    var sorted = r.positions.slice().sort(function (a, b) { return Math.abs(b.weight) - Math.abs(a.weight) })
+    el('rd-weights').innerHTML = sorted.map(function (p) {
+      return weightRow(p.ticker, p.name !== p.ticker ? p.name : '', Math.abs(p.weight), C.red)
+    }).join('')
+    el('rd-sectors').innerHTML = c.sectors.map(function (s) {
+      return weightRow(s.sector, s.positions.join(', '), s.weight, C.greyDark)
+    }).join('')
+  }
+
+  function renderStress(r) {
+    var tests = r.stress_tests
+    var cur = r.portfolio.base_currency, v = r.portfolio.value
+    el('rd-stress-wrap').style.height = (tests.length * 40 + 40) + 'px'
+    destroy('stress')
+    var opts = baseOptions()
+    opts.indexAxis = 'y'
+    opts.layout = { padding: { left: 56, right: 56 } }
+    opts.scales.x.ticks.callback = function (x) { return pct(x, 0) }
+    opts.scales.y.grid.display = false
+    opts.scales.y.ticks.font = { size: 12, weight: '700' }
+    opts.plugins.tooltip.callbacks = { label: function (c) { return 'Portfolio move ' + signedPct(c.raw) } }
+    charts.stress = new Chart(el('rd-stress'), {
+      type: 'bar',
+      data: {
+        labels: tests.map(function (t) { return t.name }),
+        datasets: [{
+          data: tests.map(function (t) { return t.portfolio_loss_pct }),
+          backgroundColor: tests.map(function (t) { return t.portfolio_loss_pct < 0 ? C.red : C.green }),
+          borderRadius: 4, maxBarThickness: 18,
+          endLabel: function (x) { return signedPct(x) }
+        }]
+      },
+      options: opts,
+      plugins: [endLabels]
+    })
+
+    el('rd-scenarios').innerHTML = tests.map(function (t) {
+      var loss = t.portfolio_loss_pct
+      var color = loss === null ? C.grey : loss < 0 ? C.danger : C.green
+      var top = t.positions.filter(function (p) { return p.loss_pct < 0 }).slice(0, 3)
+      var maxShare = top.length ? Math.max.apply(null, top.map(function (p) { return p.share_of_loss })) : 1
+      var rows = top.map(function (p) {
+        return '<div class="rd-scen__row"><b>' + esc(p.ticker) + '</b><div class="rd-bar"><span style="width:' + (p.share_of_loss / maxShare * 100) + '%; background:' + C.red + '"></span></div><span>' + pct(p.share_of_loss, 0) + '</span></div>'
+      }).join('')
+      var extra = ''
+      if (t.details) extra = '<div class="rd-scen__v">Volatility ' + pct(t.details.volatility_before) + ' to ' + pct(t.details.volatility_after) + ', average correlation ' + num(t.details.average_correlation_before) + ' to ' + num(t.details.average_correlation_after) + '</div>'
+      if (t.sector) extra = '<div class="rd-scen__v">Sector: ' + esc(t.sector) + (t.note ? '. ' + esc(t.note) : '') + '</div>'
+      return '<div class="rd-scen__c"><div class="rd-scen__n">' + esc(t.name) + '</div><div class="rd-scen__d">' + esc(t.description) + '</div>' +
+        '<div class="rd-scen__l" style="color:' + color + '">' + (loss === null ? '—' : signedPct(loss)) + '</div>' +
+        '<div class="rd-scen__v">' + (v && t.portfolio_loss_value !== null ? money(t.portfolio_loss_value, cur) : '') + '</div>' + extra +
+        (top.length ? '<div class="rd-scen__v" style="margin-top:6px;">Share of the loss</div>' + rows : '') + '</div>'
+    }).join('')
+  }
+
   function renderPositions(r) {
     var cur = r.portfolio.base_currency
     el('rd-positions-body').innerHTML = r.positions.map(function (p) {
@@ -237,6 +344,9 @@ var RiskDashboard = (function () {
     renderWarnings(report)
     renderContribution(report)
     renderHeatmap(report)
+    renderGrowth(report)
+    renderConcentration(report)
+    renderStress(report)
     renderPositions(report)
     el('rd-body').classList.remove('rd-loading')
   }

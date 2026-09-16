@@ -111,6 +111,35 @@
       </div>
     </div>
 
+    <div class="rd-two rd-two--wide">
+      <div class="rd-card">
+        <h2 class="rd-h2">Growth and drawdown</h2>
+        <p class="rd-sub rd-sub--tight">Growth of 1 against the benchmark, then how far the book sits below its previous high.</p>
+        <div class="rd-chart" style="height:240px;"><canvas id="rd-growth"></canvas></div>
+        <div class="rd-legend"><span><i style="background:#ae1f19"></i>Portfolio</span><span><i style="background:#9ca3af"></i><span id="rd-bench-label">Benchmark</span></span></div>
+        <div class="rd-chart" style="height:130px; margin-top:12px;"><canvas id="rd-drawdown"></canvas></div>
+      </div>
+      <div class="rd-card">
+        <h2 class="rd-h2">Concentration</h2>
+        <p class="rd-sub rd-sub--tight">Where the exposure sits, by position and by sector.</p>
+        <div class="rd-stats" id="rd-conc-stats" style="grid-template-columns:repeat(2,1fr); margin-bottom:1rem;"></div>
+        <div id="rd-weights"></div>
+        <h3 class="rd-h2" style="margin-top:1.1rem; font-size:0.9rem;">By sector</h3>
+        <div id="rd-sectors"></div>
+      </div>
+    </div>
+
+    <div class="rd-card">
+      <div class="rd-head">
+        <div>
+          <h2 class="rd-h2">Stress tests</h2>
+          <p class="rd-sub rd-sub--tight">Estimated portfolio move under each scenario and which positions are responsible. Factor scenarios use each position's regression beta to the market, long Treasuries, the dollar and its sector ETF over the window.</p>
+        </div>
+      </div>
+      <div class="rd-chart" id="rd-stress-wrap"><canvas id="rd-stress"></canvas></div>
+      <div class="rd-scen" id="rd-scenarios"></div>
+    </div>
+
     <div class="rd-card">
       <h2 class="rd-h2">Positions</h2>
       <p class="rd-sub rd-sub--tight">Every number behind the charts. Risk share above weight is flagged in red.</p>
