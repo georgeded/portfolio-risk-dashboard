@@ -1,0 +1,15 @@
+{
+  "positions": [
+    {"ticker": "AAPL", "weight": 25},
+    {"ticker": "MSFT", "weight": 20},
+    {"ticker": "NVDA", "weight": 20},
+    {"ticker": "JPM", "weight": 15},
+    {"ticker": "XOM", "weight": 10},
+    {"ticker": "ASML", "weight": 10}
+  ],
+  "benchmark": "SPY",
+  "lookback_days": 252,
+  "confidence": 0.95,
+  "portfolio_value": 100000,
+  "base_currency": "USD"
+}
