@@ -11,6 +11,8 @@ The backend is a small FastAPI service. The frontend in `frontend/` is a
 working page that draws everything the API returns, built so the same markup
 and script can be dropped into an existing site.
 
+![Dashboard](docs/dashboard.png)
+
 ## What it shows
 
 | Section | Contents |
