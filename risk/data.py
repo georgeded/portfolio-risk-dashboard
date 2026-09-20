@@ -109,18 +109,21 @@ def ticker_info(ticker: str) -> dict:
         return store[ticker]
 
     entry = {"name": ticker, "sector": None, "currency": None}
-    if not config.PRICES_CSV:
-        try:
-            import yfinance as yf
+    if config.PRICES_CSV:
+        return entry
+    try:
+        import yfinance as yf
 
-            info = yf.Ticker(ticker).info or {}
-            entry = {
-                "name": info.get("shortName") or info.get("longName") or ticker,
-                "sector": info.get("sector"),
-                "currency": info.get("currency"),
-            }
-        except Exception:
-            pass
+        info = yf.Ticker(ticker).info or {}
+    except Exception:
+        info = {}
+    if not info.get("shortName") and not info.get("sector"):
+        return entry
+    entry = {
+        "name": info.get("shortName") or info.get("longName") or ticker,
+        "sector": info.get("sector"),
+        "currency": info.get("currency"),
+    }
     store[ticker] = entry
     with open(path, "w") as f:
         json.dump(store, f, indent=1)
