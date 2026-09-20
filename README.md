@@ -140,3 +140,7 @@ The numbers are educational. Betas are simple regressions on daily returns
 over the chosen window, historical VaR only knows the days it has seen, and the
 scenarios are stylized shocks rather than forecasts. Treat the output as a way
 to make a risk discussion concrete, not as a limit system.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
