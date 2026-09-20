@@ -50,7 +50,7 @@ def test_full_report_shape():
     assert rep["risk_meter"]["level"] in ("Low", "Moderate", "High", "Very High")
 
     shares = [p["share"] for p in rep["risk_contribution"]["positions"]]
-    assert abs(sum(shares) - 1) < 1e-9
+    assert abs(sum(shares) - 1) < 1e-5
 
     matrix = np.array(rep["correlation"]["matrix"])
     assert matrix.shape == (4, 4)
@@ -62,7 +62,7 @@ def test_full_report_shape():
     assert "sector_weight" in codes
 
     assert rep["downside"]["cvar_historical"] <= rep["downside"]["var_historical"]
-    assert rep["downside"]["var_historical_value"] == rep["downside"]["var_historical"] * 50000
+    assert abs(rep["downside"]["var_historical_value"] - rep["downside"]["var_historical"] * 50000) < 0.05
 
 
 def test_stress_tests():
@@ -72,10 +72,10 @@ def test_stress_tests():
                           "fx_move", "correlation_spike"}
     crash = tests["market_crash"]
     assert crash["portfolio_loss_pct"] < -0.10
-    assert abs(sum(p["loss_pct"] for p in crash["positions"]) - crash["portfolio_loss_pct"]) < 1e-9
+    assert abs(sum(p["loss_pct"] for p in crash["positions"]) - crash["portfolio_loss_pct"]) < 1e-5
     losers = [p for p in crash["positions"] if p["loss_pct"] < 0]
-    assert abs(sum(p["share_of_loss"] for p in losers) - 1) < 1e-9
-    assert crash["portfolio_loss_value"] == crash["portfolio_loss_pct"] * 10000
+    assert abs(sum(p["share_of_loss"] for p in losers) - 1) < 1e-5
+    assert abs(crash["portfolio_loss_value"] - crash["portfolio_loss_pct"] * 10000) < 0.05
 
     spike = tests["correlation_spike"]
     assert spike["details"]["volatility_after"] >= spike["details"]["volatility_before"]
@@ -88,4 +88,4 @@ def test_fx_translation_for_euro_book():
     eur = report.build_report(positions(), base_currency="EUR")
     fx_usd = next(t for t in usd["stress_tests"] if t["id"] == "fx_move")
     fx_eur = next(t for t in eur["stress_tests"] if t["id"] == "fx_move")
-    assert abs((fx_eur["portfolio_loss_pct"] - fx_usd["portfolio_loss_pct"]) + 0.10) < 1e-9
+    assert abs((fx_eur["portfolio_loss_pct"] - fx_usd["portfolio_loss_pct"]) + 0.10) < 1e-5

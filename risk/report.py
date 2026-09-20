@@ -82,10 +82,20 @@ def _series(dates, port, bench):
     dd = metrics.drawdown_series(port)
     return {
         "dates": [d.strftime("%Y-%m-%d") for d in dates],
-        "portfolio": [round(float(v), 6) for v in port_wealth],
-        "benchmark": [round(float(v), 6) for v in bench_wealth],
-        "drawdown": [round(float(v), 6) for v in dd],
+        "portfolio": [float(v) for v in port_wealth],
+        "benchmark": [float(v) for v in bench_wealth],
+        "drawdown": [float(v) for v in dd],
     }
+
+
+def _round(obj, digits=6):
+    if isinstance(obj, float):
+        return round(obj, digits)
+    if isinstance(obj, dict):
+        return {k: _round(v, digits) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_round(v, digits) for v in obj]
+    return obj
 
 
 def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMARK,
@@ -165,7 +175,7 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
     pairs = [(tickers[i], tickers[j], float(corr_matrix[i, j])) for i in range(n) for j in range(i + 1, n)]
     corr = {
         "tickers": tickers,
-        "matrix": [[round(float(v), 4) for v in row] for row in corr_matrix],
+        "matrix": [[float(v) for v in row] for row in corr_matrix],
         "average_pairwise": float(np.mean([p[2] for p in pairs])) if pairs else 1.0,
         "highest_pair": None,
         "lowest_pair": None,
@@ -228,7 +238,7 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
     )
     warns = signals.warnings(summary, downside, conc, corr, contributions, position_rows)
 
-    return {
+    return _round({
         "as_of": prices.index[-1].strftime("%Y-%m-%d"),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "window": {
@@ -254,4 +264,4 @@ def build_report(positions: list[dict], benchmark: str = config.DEFAULT_BENCHMAR
         "positions": position_rows,
         "stress_tests": stress_results,
         "series": _series(rets.index, port_rets, bench_rets),
-    }
+    })
