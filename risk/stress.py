@@ -72,3 +72,84 @@ def run_factor_scenario(scenario, tickers, weights, betas: pd.DataFrame, sector_
         "portfolio_loss_value": total * portfolio_value if portfolio_value else None,
         "positions": rows,
     }
+
+
+def run_correlation_scenario(scenario, tickers, weights, returns: pd.DataFrame, portfolio_value):
+    """Push every pairwise correlation up to a floor, then take the parametric CVaR over the horizon."""
+    floor = scenario["correlation_floor"]
+    horizon = scenario.get("horizon_days", 10)
+    confidence = scenario.get("confidence", 0.99)
+    stds = returns.std(ddof=1).values
+    means = returns.mean().values
+    corr = returns.corr().values
+    stressed_corr = metrics.stress_correlation(corr, floor)
+    cov_base = metrics.cov_from_corr(corr, stds)
+    cov_stressed = metrics.cov_from_corr(stressed_corr, stds)
+
+    base = metrics.risk_contributions(weights, cov_base)
+    stressed = metrics.risk_contributions(weights, cov_stressed)
+    mean_p = float(weights @ means)
+    base_tail = metrics.parametric_from_moments(mean_p, base["volatility"], confidence, horizon)
+    stressed_tail = metrics.parametric_from_moments(mean_p, stressed["volatility"], confidence, horizon)
+    total = stressed_tail["cvar"]
+
+    rows = []
+    for t, w, share in zip(tickers, weights, stressed["share"]):
+        loss = total * share
+        rows.append({
+            "ticker": t,
+            "weight": float(w),
+            "move_pct": float(loss / w) if w else 0.0,
+            "loss_pct": float(loss),
+            "share_of_loss": float(share) if loss < 0 else 0.0,
+        })
+    rows.sort(key=lambda r: r["loss_pct"])
+
+    return {
+        "id": scenario["id"],
+        "name": scenario["name"],
+        "description": scenario["description"],
+        "method": "correlation",
+        "shocks": {"correlation_floor": floor, "horizon_days": horizon, "confidence": confidence},
+        "portfolio_loss_pct": float(total),
+        "portfolio_loss_value": float(total * portfolio_value) if portfolio_value else None,
+        "positions": rows,
+        "details": {
+            "volatility_before": base["volatility"] * math.sqrt(config.TRADING_DAYS),
+            "volatility_after": stressed["volatility"] * math.sqrt(config.TRADING_DAYS),
+            "average_correlation_before": _avg_offdiag(corr),
+            "average_correlation_after": _avg_offdiag(stressed_corr),
+            "cvar_before": float(base_tail["cvar"]),
+            "cvar_after": float(stressed_tail["cvar"]),
+        },
+    }
+
+
+def _avg_offdiag(m: np.ndarray) -> float:
+    n = m.shape[0]
+    if n < 2:
+        return 1.0
+    return float((m.sum() - np.trace(m)) / (n * (n - 1)))
+
+
+def run_all(tickers, weights, local_returns, base_returns, factor_returns, sector_factor, currencies,
+            base_currency, portfolio_value, largest_sector):
+    """Factor scenarios use betas on local returns, the correlation scenario base currency returns."""
+    betas = factor_betas(local_returns, factor_returns)
+    sector_betas = single_beta(local_returns, sector_factor) if sector_factor is not None else None
+    results = []
+    for scenario in config.SCENARIOS:
+        if "correlation_floor" in scenario:
+            res = run_correlation_scenario(scenario, tickers, weights, base_returns, portfolio_value)
+        else:
+            res = run_factor_scenario(scenario, tickers, weights, betas, sector_betas,
+                                      currencies, base_currency, portfolio_value)
+            if "sector" in scenario["shocks"]:
+                res["sector"] = largest_sector
+                if sector_betas is None:
+                    res["portfolio_loss_pct"] = None
+                    res["portfolio_loss_value"] = None
+                    res["positions"] = []
+                    res["note"] = "No sector ETF mapped for the largest sector"
+        results.append(res)
+    return results, betas
