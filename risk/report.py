@@ -78,3 +78,61 @@ def resolve_positions(positions: list[dict], portfolio_value: float | None,
         weights = np.full(len(tickers), 1 / len(tickers))
 
     return tickers, weights, portfolio_value
+
+
+def _enrich(positions, tickers):
+    infos = []
+    for p, t in zip(positions, tickers):
+        info = data.ticker_info(t)
+        quoted = p.get("currency") or info["currency"]
+        if p.get("currency") and not re.fullmatch(r"[A-Za-z]{3}", str(p["currency"])):
+            raise InputError(f"currency for {t} must be a three letter code, got {p['currency']!r}")
+        currency, scale = data.currency_unit(quoted)
+        infos.append({
+            "ticker": t,
+            "name": p.get("name") or info["name"],
+            "sector": p.get("sector") or info["sector"] or "Unknown",
+            "currency": currency,
+            "price_scale": scale,
+        })
+    return infos
+
+
+def _sector_weights(infos, weights):
+    by_sector: dict[str, dict] = {}
+    for info, w in zip(infos, weights):
+        s = by_sector.setdefault(info["sector"], {"sector": info["sector"], "weight": 0.0, "positions": []})
+        s["weight"] += abs(float(w))
+        s["positions"].append(info["ticker"])
+    return sorted(by_sector.values(), key=lambda s: -s["weight"])
+
+
+def _to_base(prices: pd.DataFrame, units: dict, base: str) -> pd.DataFrame:
+    """Prices of the given tickers converted to the base currency.
+
+    `units` maps a ticker to its (currency, price scale).
+    """
+    out = {}
+    for t, (currency, scale) in units.items():
+        fx = 1.0 if currency == base else prices[data.fx_ticker(currency, base)]
+        out[t] = prices[t] * scale * fx
+    return pd.DataFrame(out, index=prices.index)
+
+
+def _series(dates, port, bench):
+    return {
+        "dates": [d.strftime("%Y-%m-%d") for d in dates],
+        "portfolio": [float(v) for v in (1 + port).cumprod()],
+        "benchmark": [float(v) for v in (1 + bench).cumprod()],
+        "drawdown": [float(v) for v in metrics.drawdown_series(port)],
+    }
+
+
+def _round(obj, digits=6):
+    if isinstance(obj, float):
+        return round(obj, digits)
+    if isinstance(obj, dict):
+        return {k: _round(v, digits) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_round(v, digits) for v in obj]
+    return obj
