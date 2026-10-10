@@ -1,0 +1,11 @@
+{
+  "positions": [
+    {"ticker": "AAPL", "quantity": 30, "sector": "Technology"},
+    {"ticker": "JPM", "quantity": 40, "sector": "Financial Services"},
+    {"ticker": "XOM", "quantity": 60, "sector": "Energy"},
+    {"ticker": "ASML", "quantity": 8, "sector": "Technology", "currency": "USD"}
+  ],
+  "benchmark": "SPY",
+  "lookback_days": 504,
+  "base_currency": "EUR"
+}
