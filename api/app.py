@@ -92,3 +92,37 @@ def scenarios():
 def thresholds():
     return {"thresholds": config.THRESHOLDS, "risk_meter": config.RISK_METER,
             "levels": [{"below": cap, "level": name} for cap, name in config.RISK_LEVELS]}
+
+
+@app.get("/api/search")
+def search(q: str = Query(..., min_length=1, max_length=40, description="Company name or ticker")):
+    return {"results": data.search(q)}
+
+
+@app.get("/api/lookup/{ticker}")
+def lookup(ticker: str, base: str = config.DEFAULT_BASE_CURRENCY):
+    try:
+        ticker = data.normalize_ticker(ticker)
+        base = report.currency_code(base, "base")
+    except (data.DataError, report.InputError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        quoted = float(data.last_prices([ticker]).iloc[0])
+    except data.DataError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    info = data.ticker_info(ticker)
+    currency, scale = data.currency_unit(info["currency"])
+    price = quoted * scale
+    try:
+        rate = 1.0 if currency == base else float(data.last_prices([data.fx_ticker(currency, base)]).iloc[0])
+    except data.DataError:
+        rate = None
+    return {
+        "ticker": ticker,
+        "name": info["name"],
+        "sector": info["sector"],
+        "currency": currency,
+        "last_price": price,
+        "price_in_base": price * rate if rate is not None else None,
+        "base_currency": base,
+    }
