@@ -126,3 +126,44 @@ def lookup(ticker: str, base: str = config.DEFAULT_BASE_CURRENCY):
         "price_in_base": price * rate if rate is not None else None,
         "base_currency": base,
     }
+
+
+@app.post("/api/report")
+def report_post(req: ReportRequest):
+    return _run(req)
+
+
+@app.get("/api/report")
+def report_get(
+    tickers: str = Query(..., description="Comma separated, for example AAPL,MSFT,NVDA"),
+    weights: str | None = Query(None, description="Comma separated, same order as tickers"),
+    benchmark: str = config.DEFAULT_BENCHMARK,
+    lookback_days: int = config.DEFAULT_LOOKBACK_DAYS,
+    confidence: float = config.DEFAULT_CONFIDENCE,
+    portfolio_value: float | None = None,
+    base_currency: str = config.DEFAULT_BASE_CURRENCY,
+):
+    symbols = [t.strip() for t in tickers.split(",") if t.strip()]
+    try:
+        ws = [float(w) for w in weights.split(",")] if weights else [None] * len(symbols)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="weights must be comma separated numbers")
+    if len(ws) != len(symbols):
+        raise HTTPException(status_code=400, detail="weights and tickers differ in length")
+    req = ReportRequest(
+        positions=[Position(ticker=t, weight=w) for t, w in zip(symbols, ws)],
+        benchmark=benchmark,
+        lookback_days=lookback_days,
+        confidence=confidence,
+        portfolio_value=portfolio_value,
+        base_currency=base_currency,
+    )
+    return _run(req)
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
