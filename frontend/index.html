@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio Risk Dashboard</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="rd-shell">
+  <div class="rd-topbar">
+    <div class="rd-brand">Portfolio risk</div>
+    <a href="/docs" target="_blank" rel="noopener">API reference</a>
+  </div>
+
+  <div class="rd-card">
+    <div class="rd-head">
+      <div>
+        <h1 class="rd-h">Risk dashboard</h1>
+        <p class="rd-sub" style="margin-bottom:0;">Where the book is taking risk and what could hurt it. Build a book, pick a window and run. <span class="rd-muted">Educational, not investment advice.</span></p>
+      </div>
+      <div class="rd-head-right">
+        <span class="rd-pill rd-pill--grey">As of <span id="rd-asof">-</span></span>
+        <span class="rd-pill rd-pill--grey" id="rd-window">-</span>
+      </div>
+    </div>
+    <form class="rd-form" id="rd-form">
+      <div class="rd-field rd-field--wide">
+        <div class="rd-book__bar">
+          <label>Positions</label>
+          <div class="rd-seg" role="group" aria-label="Size positions by">
+            <button type="button" data-mode="weight" aria-pressed="true">Weights</button>
+            <button type="button" data-mode="quantity" aria-pressed="false">Shares</button>
+          </div>
+          <select id="rd-preset" aria-label="Load a sample book">
+            <option value="">Load a sample book</option>
+          </select>
+          <button type="button" class="rd-link" id="rd-equal">Equal weights</button>
+        </div>
+        <div class="rd-table-wrap">
+          <table class="rd-book">
+            <thead><tr><th>Ticker</th><th>Name</th><th id="rd-amount-head">Weight</th><th>Share of book</th><th></th></tr></thead>
+            <tbody id="rd-book-rows"></tbody>
+          </table>
+        </div>
+        <div class="rd-book__add">
+          <input id="rd-add" list="rd-suggest" placeholder="Add a position: search a company or type a ticker, e.g. ASML.AS" autocomplete="off" spellcheck="false">
+          <datalist id="rd-suggest"></datalist>
+          <button type="button" class="rd-btn rd-btn--outline" id="rd-add-btn">Add</button>
+        </div>
+        <div class="rd-hint" id="rd-book-note"></div>
+      </div>
+      <div class="rd-field">
+        <label for="rd-benchmark">Benchmark</label>
+        <input id="rd-benchmark" value="SPY">
+      </div>
+      <div class="rd-field">
+        <label for="rd-lookback">Window</label>
+        <select id="rd-lookback">
+          <option value="126">6 months</option>
+          <option value="252" selected>1 year</option>
+          <option value="504">2 years</option>
+          <option value="756">3 years</option>
+          <option value="1250">5 years</option>
+        </select>
+      </div>
+      <div class="rd-field">
+        <label for="rd-value">Book value</label>
+        <input id="rd-value" value="100000" inputmode="decimal">
+      </div>
+      <div class="rd-field">
+        <label for="rd-currency">Base currency</label>
+        <select id="rd-currency">
+          <option value="USD" selected>USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+        </select>
+      </div>
+      <div class="rd-field">
+        <button class="rd-btn rd-btn--primary" type="submit" id="rd-run">Run</button>
+      </div>
+    </form>
+    <div class="rd-error" id="rd-error"></div>
+  </div>
+
+  <div id="rd-body" class="rd-loading">
+    <div class="rd-card">
+      <div class="rd-head">
+        <div>
+          <h2 class="rd-h2">Risk meter</h2>
+          <p class="rd-sub rd-sub--tight">One score for the whole book, from volatility, drawdown, downside tail, concentration and correlation.</p>
+        </div>
+        <span class="rd-pill rd-pill--grey" id="rd-level-pill">-</span>
+      </div>
+      <div class="rd-meter">
+        <div>
+          <div class="rd-gauge" id="rd-gauge"></div>
+          <div class="rd-gauge__ends"><span>Low</span><span>Very high</span></div>
+        </div>
+        <div id="rd-components"></div>
+      </div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Overview</h2>
+      <p class="rd-sub rd-sub--tight">Portfolio over the window, daily rebalanced to the entered weights. VaR and CVaR are one day at the confidence shown.</p>
+      <div class="rd-stats" id="rd-stats"></div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Warnings</h2>
+      <p class="rd-sub rd-sub--tight">Raised when concentration, downside or market dependence crosses a threshold.</p>
+      <div id="rd-warnings"></div>
+    </div>
+
+    <div class="rd-two">
+      <div class="rd-card">
+        <h2 class="rd-h2">Risk contribution</h2>
+        <p class="rd-sub rd-sub--tight">Share of portfolio volatility each position creates, next to its weight. A name whose risk share is well above its weight is doing more damage than its size suggests.</p>
+        <div class="rd-chart" id="rd-contrib-wrap"><canvas id="rd-contrib"></canvas></div>
+        <div class="rd-legend"><span><i style="background:#ae1f19"></i>Risk share</span><span><i style="background:#9ca3af"></i>Weight</span></div>
+      </div>
+      <div class="rd-card">
+        <h2 class="rd-h2">Correlation</h2>
+        <p class="rd-sub rd-sub--tight">Daily return correlation between positions. Red pairs move together, blue pairs offset each other.</p>
+        <div id="rd-heatmap"></div>
+        <div class="rd-heat__legend"><span>-1</span><div class="rd-heat__ramp"></div><span>+1</span><span id="rd-corr-note" style="margin-left:auto;"></span></div>
+      </div>
+    </div>
+
+    <div class="rd-two rd-two--wide">
+      <div class="rd-card">
+        <h2 class="rd-h2">Growth and drawdown</h2>
+        <p class="rd-sub rd-sub--tight">Growth of 1 against the benchmark, then how far the book sits below its previous high.</p>
+        <div class="rd-chart" style="height:240px;"><canvas id="rd-growth"></canvas></div>
+        <div class="rd-legend"><span><i style="background:#ae1f19"></i>Portfolio</span><span><i style="background:#9ca3af"></i><span id="rd-bench-label">Benchmark</span></span></div>
+        <div class="rd-chart" style="height:130px; margin-top:12px;"><canvas id="rd-drawdown"></canvas></div>
+      </div>
+      <div class="rd-card">
+        <h2 class="rd-h2">Concentration</h2>
+        <p class="rd-sub rd-sub--tight">Where the exposure sits, by position and by sector.</p>
+        <div class="rd-stats" id="rd-conc-stats" style="grid-template-columns:repeat(2,1fr); margin-bottom:1rem;"></div>
+        <div id="rd-weights"></div>
+        <h3 class="rd-h2" style="margin-top:1.1rem; font-size:0.9rem;">By sector</h3>
+        <div id="rd-sectors"></div>
+      </div>
+    </div>
+
+    <div class="rd-card">
+      <div class="rd-head">
+        <div>
+          <h2 class="rd-h2">Stress tests</h2>
+          <p class="rd-sub rd-sub--tight">Estimated portfolio move under each scenario and which positions are responsible. Factor scenarios use each position's regression beta to the market, long Treasuries, the dollar and its sector ETF over the window.</p>
+        </div>
+      </div>
+      <div class="rd-chart" id="rd-stress-wrap"><canvas id="rd-stress"></canvas></div>
+      <div class="rd-scen" id="rd-scenarios"></div>
+    </div>
+
+    <div class="rd-card">
+      <h2 class="rd-h2">Positions</h2>
+      <p class="rd-sub rd-sub--tight">Every number behind the charts. Risk share above weight is flagged in red.</p>
+      <div class="rd-table-wrap">
+        <table class="rd-table">
+          <thead><tr><th>Symbol</th><th>Sector</th><th>Weight</th><th>Value</th><th>Return</th><th>Volatility</th><th>Max DD</th><th>Beta</th><th>VaR 95</th><th>Risk share</th><th>Risk / weight</th></tr></thead>
+          <tbody id="rd-positions-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="rd-foot">Prices from Yahoo Finance, adjusted for dividends and splits. Windows use trading days.</p>
+</div>
+<script src="/static/dashboard.js"></script>
+<script>
+  RiskDashboard.init({ apiBase: '' })
+</script>
+</body>
+</html>
