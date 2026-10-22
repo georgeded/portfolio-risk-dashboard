@@ -350,5 +350,36 @@ var RiskDashboard = (function () {
     el('rd-body').classList.remove('rd-loading')
   }
 
-  return { render: render }
+  function showError(msg) {
+    var box = el('rd-error')
+    box.textContent = msg
+    box.classList.toggle('show', !!msg)
+  }
+
+  function load(request) {
+    el('rd-body').classList.add('rd-loading')
+    el('rd-run').disabled = true
+    showError('')
+    return fetch(state.apiBase + '/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    }).then(function (res) {
+      return res.json().then(function (body) {
+        if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail))
+        return body
+      })
+    }).then(function (report) {
+      render(report)
+      return report
+    }).catch(function (err) {
+      showError(err.message)
+      el('rd-body').classList.remove('rd-loading')
+      throw err
+    }).finally(function () {
+      el('rd-run').disabled = false
+    })
+  }
+
+  return { load: load, render: render }
 })()
