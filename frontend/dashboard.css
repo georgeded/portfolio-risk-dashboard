@@ -53,6 +53,35 @@ body { margin: 0; background: #fff; color: var(--rd-ink); font-family: var(--rd-
 .rd-field label { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--rd-grey); margin-bottom: 4px; }
 .rd-field input, .rd-field select { width: 100%; font: inherit; font-size: 0.88rem; padding: 9px 11px; border: 1px solid #e3e6ea; border-radius: 11px; background: #fff; color: var(--rd-ink); }
 .rd-field input:focus, .rd-field select:focus { outline: none; border-color: var(--rd-red); box-shadow: 0 0 0 3px rgba(174,31,25,0.12); }
+.rd-book__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.rd-book__bar label { margin: 0 auto 0 0; }
+.rd-book__bar select { width: auto; padding: 6px 30px 6px 10px; font-size: 0.82rem; }
+.rd-seg { display: inline-flex; background: var(--rd-track); border-radius: 9999px; padding: 3px; }
+.rd-seg button { border: 0; background: transparent; font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--rd-grey); padding: 5px 14px; border-radius: 9999px; cursor: pointer; }
+.rd-seg button[aria-pressed="true"] { background: #fff; color: var(--rd-ink); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.rd-link { border: 0; background: none; font: inherit; font-size: 0.82rem; font-weight: 700; color: var(--rd-red); cursor: pointer; padding: 4px 2px; }
+.rd-link:hover { text-decoration: underline; }
+.rd-book { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.rd-book th { text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--rd-grey); padding: 6px 8px; border-bottom: 1px solid var(--rd-line); }
+.rd-book td { padding: 6px 8px; border-bottom: 1px solid var(--rd-line); vertical-align: middle; }
+.rd-book td.rd-muted { padding: 14px 8px; }
+.rd-field .rd-book__ticker { width: 110px; font-weight: 700; text-transform: uppercase; padding: 6px 9px; }
+.rd-book__name { min-width: 160px; line-height: 1.3; }
+.rd-book__name small { display: block; color: var(--rd-grey-light); font-size: 0.74rem; }
+.rd-book__bad { color: var(--rd-danger); font-weight: 700; }
+.rd-book__amount { display: flex; align-items: center; gap: 10px; }
+.rd-field .rd-book__amount input[type=number] { width: 84px; padding: 6px 9px; text-align: right; }
+.rd-field .rd-book__amount input[type=range] { width: 120px; padding: 0; border: 0; box-shadow: none; accent-color: var(--rd-red); }
+.rd-book__share { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.rd-book__share .rd-bar { flex: 1; }
+.rd-book__share span:last-child { width: 46px; text-align: right; font-weight: 700; font-size: 0.8rem; }
+.rd-book__share .rd-bar span { background: var(--rd-red); }
+.rd-book__remove { border: 0; background: none; color: var(--rd-grey-light); cursor: pointer; padding: 6px; border-radius: 8px; display: inline-flex; }
+.rd-book__remove:hover { color: var(--rd-danger); background: #fef2f2; }
+.rd-book__add { display: flex; gap: 8px; margin-top: 10px; }
+.rd-book__add input { flex: 1; }
+.rd-btn--outline { background: #fff; color: var(--rd-red); border: 1.5px solid var(--rd-red); padding: 8px 18px; }
+.rd-field input:disabled { background: var(--rd-tile); color: var(--rd-grey-light); }
 .rd-hint { font-size: 0.72rem; color: var(--rd-grey-light); margin-top: 6px; }
 .rd-error { display: none; margin-top: 10px; padding: 10px 14px; border-radius: 11px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; font-size: 0.85rem; }
 .rd-error.show { display: block; }
@@ -153,3 +182,14 @@ body { margin: 0; background: #fff; color: var(--rd-ink); font-family: var(--rd-
   .rd-form { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 640px) {
+  .rd-book thead { display: none; }
+  .rd-book, .rd-book tbody, .rd-book td { display: block; width: 100%; }
+  .rd-book tr { display: grid; grid-template-columns: 1fr auto; gap: 8px 10px; padding: 12px 0; border-bottom: 1px solid var(--rd-line); }
+  .rd-book td { border: 0; padding: 0; }
+  .rd-book td:nth-child(5) { grid-column: 2; grid-row: 1; width: auto; }
+  .rd-book td:nth-child(2), .rd-book td:nth-child(3), .rd-book td:nth-child(4) { grid-column: 1 / -1; }
+  .rd-field .rd-book__ticker { width: 140px; }
+  .rd-field .rd-book__amount input[type=range] { flex: 1; width: auto; }
+  .rd-book__add .rd-btn { padding: 8px 14px; }
+}

@@ -381,5 +381,229 @@ var RiskDashboard = (function () {
     })
   }
 
-  return { load: load, render: render }
+  // Book editor: one row per position, checked against the API as it is typed.
+  var PRESETS = [
+    { name: 'US large caps', rows: [['AAPL', 25], ['MSFT', 20], ['NVDA', 20], ['JPM', 15], ['XOM', 10], ['ASML', 10]] },
+    { name: 'Global, three currencies', rows: [['AAPL', 30], ['MSFT', 20], ['ASML.AS', 25], ['SHEL.L', 25]] },
+    { name: 'Stocks, bonds and gold', rows: [['SPY', 45], ['TLT', 30], ['GLD', 15], ['VNQ', 10]] },
+    { name: 'Concentrated chips', rows: [['NVDA', 40], ['AMD', 30], ['TSM', 30]] }
+  ]
+  var STORAGE_KEY = 'rd-book'
+  var book = { mode: 'weight', rows: [] }
+  var lookups = {}
+
+  function saveBook() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(book)) } catch (e) {}
+  }
+
+  function restoreBook() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY))
+      if (saved && saved.rows && saved.rows.length) return saved
+    } catch (e) {}
+    return { mode: 'weight', rows: PRESETS[0].rows.map(function (r) { return { ticker: r[0], amount: r[1] } }) }
+  }
+
+  // Lookups are cached per base currency, since the price in base depends on it.
+  function lookupKey(ticker) { return ticker + '|' + el('rd-currency').value }
+
+  function lookup(ticker) {
+    var key = lookupKey(ticker)
+    if (!ticker || lookups[key]) return
+    lookups[key] = { status: 'checking' }
+    fetch(state.apiBase + '/api/lookup/' + encodeURIComponent(ticker) + '?base=' + el('rd-currency').value).then(function (res) {
+      return res.json().then(function (body) {
+        lookups[key] = res.ok ? { status: 'ok', info: body } : { status: 'missing', message: body.detail }
+      })
+    }).catch(function () {
+      delete lookups[key]
+    }).finally(updateBook)
+  }
+
+  // Share of the book for each row: weights directly, shares at the latest price.
+  function shares() {
+    var sizes = book.rows.map(function (r) {
+      var amount = Math.abs(parseFloat(r.amount)) || 0
+      if (book.mode === 'weight') return amount
+      var l = lookups[lookupKey(r.ticker)]
+      return l && l.status === 'ok' && l.info.price_in_base !== null ? amount * l.info.price_in_base : 0
+    })
+    var total = sizes.reduce(function (a, b) { return a + b }, 0)
+    return sizes.map(function (x) { return total ? x / total : 0 })
+  }
+
+  function nameCell(ticker) {
+    var l = lookups[lookupKey(ticker)]
+    if (!ticker) return '<span class="rd-muted">Enter a ticker</span>'
+    if (!l || l.status === 'checking') return '<span class="rd-muted">Checking...</span>'
+    if (l.status === 'missing') return '<span class="rd-book__bad">Not found</span>'
+    var i = l.info
+    return esc(i.name) + '<small>' + esc(i.currency || 'USD') + ' ' + num(i.last_price, 2) + '</small>'
+  }
+
+  function renderBook() {
+    var weights = book.mode === 'weight'
+    el('rd-amount-head').textContent = weights ? 'Weight' : 'Shares'
+    document.querySelectorAll('.rd-seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === book.mode))
+    })
+    el('rd-equal').hidden = !weights
+    el('rd-value').disabled = !weights
+    el('rd-value').title = weights ? '' : 'Computed from the shares and latest prices'
+    el('rd-book-rows').innerHTML = book.rows.map(function (r, i) {
+      var slider = weights ? '<input type="range" min="0" max="100" step="1" value="' + Math.min(100, Math.abs(r.amount) || 0) + '" data-i="' + i + '" data-field="slider" aria-label="Weight of ' + esc(r.ticker) + '">' : ''
+      return '<tr><td><input class="rd-book__ticker" value="' + esc(r.ticker) + '" data-i="' + i + '" data-field="ticker" maxlength="20" spellcheck="false" aria-label="Ticker"></td>' +
+        '<td class="rd-book__name" data-name="' + i + '"></td>' +
+        '<td><div class="rd-book__amount"><input type="number" min="0" step="any" value="' + esc(r.amount) + '" data-i="' + i + '" data-field="amount" aria-label="Amount">' + slider + '</div></td>' +
+        '<td><div class="rd-book__share"><div class="rd-bar"><span data-bar="' + i + '"></span></div><span data-share="' + i + '"></span></div></td>' +
+        '<td><button type="button" class="rd-book__remove" data-remove="' + i + '" aria-label="Remove ' + esc(r.ticker) + '">' +
+        '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></td></tr>'
+    }).join('') || '<tr><td colspan="5" class="rd-muted">No positions yet. Add one below or load a sample book.</td></tr>'
+    book.rows.forEach(function (r) { lookup(r.ticker) })
+    updateBook()
+  }
+
+  // Refreshes names, shares and the note without rebuilding the inputs.
+  function updateBook() {
+    var s = shares()
+    book.rows.forEach(function (r, i) {
+      var name = document.querySelector('[data-name="' + i + '"]')
+      if (!name) return
+      name.innerHTML = nameCell(r.ticker)
+      document.querySelector('[data-bar="' + i + '"]').style.width = (s[i] * 100) + '%'
+      document.querySelector('[data-share="' + i + '"]').textContent = pct(s[i], 1)
+    })
+    var note = ''
+    if (book.rows.length && book.mode === 'weight') {
+      note = 'Weights are normalized, so any scale works. A negative weight is a short.'
+    } else if (book.rows.length) {
+      var total = book.rows.reduce(function (sum, r) {
+        var l = lookups[lookupKey(r.ticker)]
+        return sum + (l && l.status === 'ok' && l.info.price_in_base !== null ? Math.abs(parseFloat(r.amount) || 0) * l.info.price_in_base : 0)
+      }, 0)
+      note = 'Book worth about ' + money(total, el('rd-currency').value) + ' at the latest prices, converted to the base currency.'
+    }
+    el('rd-book-note').textContent = note
+    saveBook()
+  }
+
+  function addPosition(ticker) {
+    ticker = String(ticker || '').trim().toUpperCase().split(' ')[0]
+    if (!ticker) return
+    if (book.rows.some(function (r) { return r.ticker === ticker })) {
+      showError(ticker + ' is already in the book')
+      return
+    }
+    showError('')
+    book.rows.push({ ticker: ticker, amount: 10 })
+    el('rd-add').value = ''
+    el('rd-suggest').innerHTML = ''
+    renderBook()
+  }
+
+  var searchTimer = null
+  function suggest(query) {
+    clearTimeout(searchTimer)
+    if (query.trim().length < 2) return
+    searchTimer = setTimeout(function () {
+      fetch(state.apiBase + '/api/search?q=' + encodeURIComponent(query.trim())).then(function (res) {
+        return res.ok ? res.json() : { results: [] }
+      }).then(function (body) {
+        el('rd-suggest').innerHTML = body.results.map(function (x) {
+          return '<option value="' + esc(x.ticker) + '">' + esc(x.name) + (x.exchange ? ', ' + esc(x.exchange) : '') + '</option>'
+        }).join('')
+      }).catch(function () {})
+    }, 250)
+  }
+
+  function wireBook() {
+    var rows = el('rd-book-rows')
+    rows.addEventListener('input', function (e) {
+      var i = Number(e.target.dataset.i), field = e.target.dataset.field
+      if (field === 'amount' || field === 'slider') {
+        book.rows[i].amount = e.target.value
+        var other = rows.querySelector('[data-i="' + i + '"][data-field="' + (field === 'amount' ? 'slider' : 'amount') + '"]')
+        if (other) other.value = e.target.value
+        updateBook()
+      }
+    })
+    rows.addEventListener('change', function (e) {
+      if (e.target.dataset.field !== 'ticker') return
+      book.rows[Number(e.target.dataset.i)].ticker = e.target.value.trim().toUpperCase()
+      renderBook()
+    })
+    rows.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-remove]')
+      if (!btn) return
+      book.rows.splice(Number(btn.dataset.remove), 1)
+      renderBook()
+    })
+    el('rd-add').addEventListener('input', function (e) { suggest(e.target.value) })
+    el('rd-add').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      addPosition(e.target.value)
+    })
+    el('rd-add-btn').addEventListener('click', function () { addPosition(el('rd-add').value) })
+    document.querySelectorAll('.rd-seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (book.mode === b.dataset.mode) return
+        book.mode = b.dataset.mode
+        book.rows.forEach(function (r) { r.amount = 10 })
+        renderBook()
+      })
+    })
+    el('rd-equal').addEventListener('click', function () {
+      book.rows.forEach(function (r) { r.amount = Math.round(100 / book.rows.length * 100) / 100 })
+      renderBook()
+    })
+    el('rd-currency').addEventListener('change', renderBook)
+    var preset = el('rd-preset')
+    preset.innerHTML += PRESETS.map(function (p, i) { return '<option value="' + i + '">' + esc(p.name) + '</option>' }).join('')
+    preset.addEventListener('change', function () {
+      if (preset.value === '') return
+      book = { mode: 'weight', rows: PRESETS[preset.value].rows.map(function (r) { return { ticker: r[0], amount: r[1] } }) }
+      preset.value = ''
+      renderBook()
+    })
+  }
+
+  function requestFromForm() {
+    var rows = book.rows.filter(function (r) { return r.ticker })
+    if (!rows.length) throw new Error('Add at least one position')
+    var key = book.mode === 'weight' ? 'weight' : 'quantity'
+    var positions = rows.map(function (r) {
+      var amount = parseFloat(r.amount)
+      if (isNaN(amount)) throw new Error('Enter a ' + (key === 'weight' ? 'weight' : 'number of shares') + ' for ' + r.ticker)
+      var p = { ticker: r.ticker }
+      p[key] = amount
+      return p
+    })
+    var value = parseFloat(String(el('rd-value').value).replace(/[^0-9.]/g, ''))
+    return {
+      positions: positions,
+      benchmark: el('rd-benchmark').value.trim().toUpperCase() || 'SPY',
+      lookback_days: parseInt(el('rd-lookback').value, 10),
+      portfolio_value: key === 'quantity' || isNaN(value) || value <= 0 ? null : value,
+      base_currency: el('rd-currency').value
+    }
+  }
+
+  function init(opts) {
+    state.apiBase = (opts && opts.apiBase) || ''
+    book = restoreBook()
+    wireBook()
+    renderBook()
+    el('rd-form').addEventListener('submit', function (e) {
+      e.preventDefault()
+      try {
+        load(requestFromForm()).catch(function () {})
+      } catch (err) {
+        showError(err.message)
+      }
+    })
+    load(requestFromForm()).catch(function () {})
+  }
+
+  return { init: init, load: load, render: render }
 })()
