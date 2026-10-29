@@ -145,6 +145,11 @@ def last_prices(tickers: list[str]) -> pd.Series:
     return prices.iloc[-1]
 
 
+# Funds and indices have no sector, so a lookup without one is still complete.
+NO_SECTOR_TYPES = {"ETF", "INDEX", "MUTUALFUND", "CURRENCY", "CRYPTOCURRENCY"}
+RETRY_INCOMPLETE_HOURS = 1
+
+
 def ticker_info(ticker: str) -> dict:
     """Name, sector and quote currency from Yahoo, cached on disk. Empty fields when offline."""
     ticker = normalize_ticker(ticker)
@@ -153,8 +158,10 @@ def ticker_info(ticker: str) -> dict:
     if os.path.exists(path):
         with open(path) as f:
             store = json.load(f)
-    if ticker in store:
-        return store[ticker]
+    cached = store.get(ticker)
+    # Yahoo sometimes answers without a sector; such entries are fetched again later.
+    if cached and (cached.get("complete", True) or time.time() - cached.get("fetched", 0) < RETRY_INCOMPLETE_HOURS * 3600):
+        return {k: cached[k] for k in ("name", "sector", "currency")}
 
     entry = {"name": ticker, "sector": None, "currency": None}
     if config.PRICES_CSV:
@@ -165,14 +172,15 @@ def ticker_info(ticker: str) -> dict:
         info = yf.Ticker(ticker).info or {}
     except Exception:
         info = {}
-    if not info.get("shortName") and not info.get("sector"):
-        return entry
+    if not info.get("longName") and not info.get("shortName"):
+        return {k: cached[k] for k in ("name", "sector", "currency")} if cached else entry
     entry = {
-        "name": info.get("shortName") or info.get("longName") or ticker,
+        "name": info.get("longName") or info.get("shortName"),
         "sector": info.get("sector"),
         "currency": info.get("currency"),
     }
-    store[ticker] = entry
+    store[ticker] = {**entry, "complete": bool(entry["sector"]) or info.get("quoteType") in NO_SECTOR_TYPES,
+                     "fetched": time.time()}
     with open(path, "w") as f:
         json.dump(store, f, indent=1)
     return entry
@@ -207,7 +215,7 @@ def search(query: str, limit: int = 8) -> list[dict]:
                 continue
             results.append({
                 "ticker": symbol,
-                "name": item.get("shortname") or item.get("longname") or symbol,
+                "name": item.get("longname") or item.get("shortname") or symbol,
                 "exchange": item.get("exchDisp"),
                 "type": item.get("quoteType").lower(),
             })
