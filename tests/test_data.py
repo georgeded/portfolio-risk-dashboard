@@ -87,3 +87,21 @@ def test_funds_without_a_sector_are_cached(monkeypatch, tmp_path):
     data.ticker_info("SPY")
     data.ticker_info("SPY")
     assert len(calls) == 1
+
+
+def test_info_cache_survives_parallel_requests(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    class FakeTicker:
+        def __init__(self, ticker):
+            self.info = {"longName": f"{ticker} Inc.", "sector": "Technology", "quoteType": "EQUITY"}
+
+    monkeypatch.setitem(__import__("sys").modules, "yfinance", type("yf", (), {"Ticker": FakeTicker}))
+    monkeypatch.setattr(config, "PRICES_CSV", None)
+    monkeypatch.setattr(config, "CACHE_DIR", str(tmp_path))
+    (tmp_path / "info.json").write_text('{"AAPL": {"name": "Ap')
+    tickers = [f"T{i}" for i in range(40)]
+    with ThreadPoolExecutor(8) as pool:
+        names = list(pool.map(lambda t: data.ticker_info(t)["name"], tickers))
+    assert names == [f"{t} Inc." for t in tickers]
+    assert set(json.loads((tmp_path / "info.json").read_text())) == set(tickers)

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import threading
 import time
 
 import numpy as np
@@ -60,14 +61,15 @@ def _fresh(path: str) -> bool:
 def _download(tickers: list[str]) -> pd.DataFrame:
     import yfinance as yf
 
-    raw = yf.download(
-        tickers,
-        period=f"{config.DOWNLOAD_YEARS}y",
-        auto_adjust=True,
-        progress=False,
-        threads=True,
-        group_by="column",
-    )
+    with _download_lock:
+        raw = yf.download(
+            tickers,
+            period=f"{config.DOWNLOAD_YEARS}y",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+            group_by="column",
+        )
     if raw is None or raw.empty:
         return pd.DataFrame()
     close = raw["Close"]
@@ -77,16 +79,24 @@ def _download(tickers: list[str]) -> pd.DataFrame:
     return close
 
 
+def _read_cached(path: str) -> pd.Series | None:
+    if not _fresh(path):
+        return None
+    try:
+        return pd.read_csv(path, index_col=0, parse_dates=True).iloc[:, 0]
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def _yahoo_prices(tickers: list[str]) -> pd.DataFrame:
     frames = []
     missing = []
     for t in tickers:
-        path = _cache_path(f"{t}.csv")
-        if _fresh(path):
-            s = pd.read_csv(path, index_col=0, parse_dates=True).iloc[:, 0]
-            frames.append(s.rename(t))
-        else:
+        s = _read_cached(_cache_path(f"{t}.csv"))
+        if s is None:
             missing.append(t)
+        else:
+            frames.append(s.rename(t))
 
     if missing:
         close = _download(missing)
@@ -94,7 +104,10 @@ def _yahoo_prices(tickers: list[str]) -> pd.DataFrame:
             if t not in close.columns or close[t].dropna().empty:
                 raise DataError(f"No price history for {t}")
             s = close[t].dropna()
-            s.to_csv(_cache_path(f"{t}.csv"), header=[t])
+            path = _cache_path(f"{t}.csv")
+            tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+            s.to_csv(tmp, header=[t])
+            os.replace(tmp, path)
             frames.append(s.rename(t))
 
     return pd.concat(frames, axis=1).sort_index()
@@ -148,17 +161,33 @@ def last_prices(tickers: list[str]) -> pd.Series:
 # Funds and indices have no sector, so a lookup without one is still complete.
 NO_SECTOR_TYPES = {"ETF", "INDEX", "MUTUALFUND", "CURRENCY", "CRYPTOCURRENCY"}
 RETRY_INCOMPLETE_HOURS = 1
+_info_lock = threading.Lock()
+# yfinance keeps download results in module globals, so overlapping downloads can mix them up.
+_download_lock = threading.Lock()
+
+
+def _read_store(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_store(path: str, store: dict) -> None:
+    # Write to a temporary file and swap it in, so readers never see half a file.
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(store, f, indent=1)
+    os.replace(tmp, path)
 
 
 def ticker_info(ticker: str) -> dict:
     """Name, sector and quote currency from Yahoo, cached on disk. Empty fields when offline."""
     ticker = normalize_ticker(ticker)
     path = _cache_path("info.json")
-    store = {}
-    if os.path.exists(path):
-        with open(path) as f:
-            store = json.load(f)
-    cached = store.get(ticker)
+    with _info_lock:
+        cached = _read_store(path).get(ticker)
     # Yahoo sometimes answers without a sector; such entries are fetched again later.
     if cached and (cached.get("complete", True) or time.time() - cached.get("fetched", 0) < RETRY_INCOMPLETE_HOURS * 3600):
         return {k: cached[k] for k in ("name", "sector", "currency")}
@@ -179,10 +208,11 @@ def ticker_info(ticker: str) -> dict:
         "sector": info.get("sector"),
         "currency": info.get("currency"),
     }
-    store[ticker] = {**entry, "complete": bool(entry["sector"]) or info.get("quoteType") in NO_SECTOR_TYPES,
-                     "fetched": time.time()}
-    with open(path, "w") as f:
-        json.dump(store, f, indent=1)
+    with _info_lock:
+        store = _read_store(path)
+        store[ticker] = {**entry, "complete": bool(entry["sector"]) or info.get("quoteType") in NO_SECTOR_TYPES,
+                         "fetched": time.time()}
+        _write_store(path, store)
     return entry
 
 
