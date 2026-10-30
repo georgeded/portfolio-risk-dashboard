@@ -607,6 +607,7 @@ var RiskDashboard = (function () {
       if (preset.value === '') return
       book = presetBook(Number(preset.value))
       renderBook()
+      run()
     })
   }
 
@@ -637,6 +638,14 @@ var RiskDashboard = (function () {
     if (save) try { localStorage.setItem('rd-theme', name) } catch (e) {}
   }
 
+  function run() {
+    try {
+      load(requestFromForm()).catch(function () {})
+    } catch (err) {
+      showError(err.message)
+    }
+  }
+
   function init(opts) {
     useTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
     el('rd-theme').addEventListener('click', function () {
@@ -649,13 +658,9 @@ var RiskDashboard = (function () {
     renderBook()
     el('rd-form').addEventListener('submit', function (e) {
       e.preventDefault()
-      try {
-        load(requestFromForm()).catch(function () {})
-      } catch (err) {
-        showError(err.message)
-      }
+      run()
     })
-    load(requestFromForm()).catch(function () {})
+    run()
   }
 
   return { init: init, load: load, render: render }
