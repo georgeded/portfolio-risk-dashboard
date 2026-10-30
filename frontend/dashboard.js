@@ -36,6 +36,9 @@ var RiskDashboard = (function () {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     })
   }
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  // 2026-03-30 -> Mar 26
+  function shortDate(iso) { return MONTHS[Number(iso.slice(5, 7)) - 1] + ' ' + iso.slice(2, 4) }
   function el(id) { return document.getElementById(id) }
   function levelColor(level) { return LEVELS[level] || C.grey }
 
@@ -220,7 +223,8 @@ var RiskDashboard = (function () {
   function renderGrowth(r) {
     var s = r.series
     var labels = s.dates
-    var tickEvery = Math.max(1, Math.round(labels.length / 6))
+    var ticks = el('rd-growth').parentNode.clientWidth < 500 ? 3 : 6
+    var tickEvery = Math.max(1, Math.round(labels.length / ticks))
     destroy('growth')
     destroy('drawdown')
     var opts = baseOptions()
@@ -228,7 +232,7 @@ var RiskDashboard = (function () {
     opts.scales.x.grid.display = false
     opts.scales.x.ticks.maxRotation = 0
     opts.scales.x.ticks.autoSkip = false
-    opts.scales.x.ticks.callback = function (v, i) { return i % tickEvery === 0 ? labels[i] : '' }
+    opts.scales.x.ticks.callback = function (v, i) { return i % tickEvery === 0 ? shortDate(labels[i]) : '' }
     opts.scales.y.ticks.callback = function (v) { return num(v, 2) }
     opts.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + num(c.raw, 3) } }
     charts.growth = new Chart(el('rd-growth'), {
@@ -295,7 +299,7 @@ var RiskDashboard = (function () {
     charts.stress = new Chart(el('rd-stress'), {
       type: 'bar',
       data: {
-        labels: tests.map(function (t) { return t.name }),
+        labels: tests.map(function (t) { return t.short_name || t.name }),
         datasets: [{
           data: tests.map(function (t) { return t.portfolio_loss_pct }),
           backgroundColor: tests.map(function (t) { return t.portfolio_loss_pct < 0 ? C.red : C.green }),
@@ -327,11 +331,14 @@ var RiskDashboard = (function () {
 
   function renderPositions(r) {
     var cur = r.portfolio.base_currency
+    var cell = function (label, value, cls) { return '<td data-label="' + label + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + value + '</td>' }
     el('rd-positions-body').innerHTML = r.positions.map(function (p) {
       var ratio = p.weight ? p.risk_share / Math.abs(p.weight) : 0
-      return '<tr><td class="sym">' + esc(p.ticker) + '<small>' + esc(p.name) + '</small></td><td>' + esc(p.sector) + '</td><td>' + pct(p.weight) + '</td><td>' + (p.value === null ? '-' : money(p.value, cur)) + '</td>' +
-        '<td class="' + (p.period_return >= 0 ? 'pos' : 'neg') + '">' + signedPct(p.period_return) + '</td><td>' + pct(p.annualized_volatility) + '</td><td>' + pct(p.max_drawdown) + '</td><td>' + num(p.beta) + '</td><td>' + pct(p.var_historical, 2) + '</td>' +
-        '<td>' + pct(p.risk_share) + '</td><td class="' + (ratio > 1.2 ? 'flag' : '') + '">' + num(ratio, 2) + 'x</td></tr>'
+      return '<tr><td class="sym">' + esc(p.ticker) + '<small>' + esc(p.name) + '</small></td>' +
+        cell('Sector', esc(p.sector)) + cell('Weight', pct(p.weight)) + cell('Value', p.value === null ? '-' : money(p.value, cur)) +
+        cell('Return', signedPct(p.period_return), p.period_return >= 0 ? 'pos' : 'neg') + cell('Volatility', pct(p.annualized_volatility)) +
+        cell('Max DD', pct(p.max_drawdown)) + cell('Beta', num(p.beta)) + cell('VaR 95', pct(p.var_historical, 2)) +
+        cell('Risk share', pct(p.risk_share)) + cell('Risk / weight', num(ratio, 2) + 'x', ratio > 1.2 ? 'flag' : '') + '</tr>'
     }).join('')
   }
 
@@ -389,7 +396,7 @@ var RiskDashboard = (function () {
     { name: 'Concentrated chips', rows: [['NVDA', 40], ['AMD', 30], ['TSM', 30]] }
   ]
   var STORAGE_KEY = 'rd-book'
-  var book = { mode: 'weight', rows: [] }
+  var book = { mode: 'weight', rows: [], preset: null }
   var lookups = {}
 
   function saveBook() {
@@ -401,7 +408,11 @@ var RiskDashboard = (function () {
       var saved = JSON.parse(localStorage.getItem(STORAGE_KEY))
       if (saved && saved.rows && saved.rows.length) return saved
     } catch (e) {}
-    return { mode: 'weight', rows: PRESETS[0].rows.map(function (r) { return { ticker: r[0], amount: r[1] } }) }
+    return presetBook(0)
+  }
+
+  function presetBook(i) {
+    return { mode: 'weight', preset: i, rows: PRESETS[i].rows.map(function (r) { return { ticker: r[0], amount: r[1] } }) }
   }
 
   // Lookups are cached per base currency, since the price in base depends on it.
@@ -448,8 +459,9 @@ var RiskDashboard = (function () {
       b.setAttribute('aria-pressed', String(b.dataset.mode === book.mode))
     })
     el('rd-equal').hidden = !weights
+    el('rd-preset').value = book.preset === null || book.preset === undefined ? '' : String(book.preset)
     el('rd-value').disabled = !weights
-    el('rd-value').title = weights ? '' : 'Computed from the shares and latest prices'
+    el('rd-value').title = weights ? 'Shows VaR, stress losses and position values in money' : 'Computed from the shares and latest prices'
     el('rd-book-rows').innerHTML = book.rows.map(function (r, i) {
       var slider = weights ? '<input type="range" min="0" max="100" step="1" value="' + Math.min(100, Math.abs(r.amount) || 0) + '" data-i="' + i + '" data-field="slider" aria-label="Weight of ' + esc(r.ticker) + '">' : ''
       return '<tr><td><input class="rd-book__ticker" value="' + esc(r.ticker) + '" data-i="' + i + '" data-field="ticker" maxlength="20" spellcheck="false" aria-label="Ticker"></td>' +
@@ -496,6 +508,7 @@ var RiskDashboard = (function () {
     }
     showError('')
     book.rows.push({ ticker: ticker, amount: 10 })
+    book.preset = null
     el('rd-add').value = ''
     el('rd-suggest').innerHTML = ''
     renderBook()
@@ -516,12 +529,20 @@ var RiskDashboard = (function () {
     }, 250)
   }
 
+  // Typing an amount keeps the inputs in place, so only the dropdown is reset.
+  function edited() {
+    if (book.preset === null) return
+    book.preset = null
+    el('rd-preset').value = ''
+  }
+
   function wireBook() {
     var rows = el('rd-book-rows')
     rows.addEventListener('input', function (e) {
       var i = Number(e.target.dataset.i), field = e.target.dataset.field
       if (field === 'amount' || field === 'slider') {
         book.rows[i].amount = e.target.value
+        edited()
         var other = rows.querySelector('[data-i="' + i + '"][data-field="' + (field === 'amount' ? 'slider' : 'amount') + '"]')
         if (other) other.value = e.target.value
         updateBook()
@@ -530,12 +551,14 @@ var RiskDashboard = (function () {
     rows.addEventListener('change', function (e) {
       if (e.target.dataset.field !== 'ticker') return
       book.rows[Number(e.target.dataset.i)].ticker = e.target.value.trim().toUpperCase()
+      book.preset = null
       renderBook()
     })
     rows.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-remove]')
       if (!btn) return
       book.rows.splice(Number(btn.dataset.remove), 1)
+      book.preset = null
       renderBook()
     })
     el('rd-add').addEventListener('input', function (e) { suggest(e.target.value) })
@@ -549,12 +572,14 @@ var RiskDashboard = (function () {
       b.addEventListener('click', function () {
         if (book.mode === b.dataset.mode) return
         book.mode = b.dataset.mode
+        book.preset = null
         book.rows.forEach(function (r) { r.amount = 10 })
         renderBook()
       })
     })
     el('rd-equal').addEventListener('click', function () {
       book.rows.forEach(function (r) { r.amount = Math.round(100 / book.rows.length * 100) / 100 })
+      book.preset = null
       renderBook()
     })
     el('rd-currency').addEventListener('change', renderBook)
@@ -562,8 +587,7 @@ var RiskDashboard = (function () {
     preset.innerHTML += PRESETS.map(function (p, i) { return '<option value="' + i + '">' + esc(p.name) + '</option>' }).join('')
     preset.addEventListener('change', function () {
       if (preset.value === '') return
-      book = { mode: 'weight', rows: PRESETS[preset.value].rows.map(function (r) { return { ticker: r[0], amount: r[1] } }) }
-      preset.value = ''
+      book = presetBook(Number(preset.value))
       renderBook()
     })
   }
