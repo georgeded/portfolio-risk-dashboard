@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,13 @@ app = FastAPI(
     version="0.2.0",
     description="Risk metrics, risk contribution, correlation, warnings and stress tests for a list of tickers.",
 )
+
+
+@app.exception_handler(Exception)
+def unexpected_error(request, exc):
+    return JSONResponse(status_code=500, content={"detail": "The server hit an unexpected error. Please run it again."})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
