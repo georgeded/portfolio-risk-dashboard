@@ -51,30 +51,35 @@ SECTOR_ETFS = {
 SCENARIOS = [
     {
         "id": "market_crash",
+        "short_name": "Market crash",
         "name": "Market crash",
         "description": "The equity market falls 20% with rates and the dollar unchanged.",
         "shocks": {"market": -0.20},
     },
     {
         "id": "rate_shock",
+        "short_name": "Rate shock",
         "name": "Sharp interest rate move",
         "description": "Yields jump and long Treasuries fall 10%, roughly a 100bp move.",
         "shocks": {"rates": -0.10},
     },
     {
         "id": "recession",
+        "short_name": "Recession",
         "name": "Recession",
         "description": "Equities fall 30%, long Treasuries rally 10% and the dollar gains 5%.",
         "shocks": {"market": -0.30, "rates": 0.10, "dollar": 0.05},
     },
     {
         "id": "sector_crash",
+        "short_name": "Sector crash",
         "name": "Sector crash",
         "description": "The portfolio's largest sector falls 25%.",
         "shocks": {"sector": -0.25},
     },
     {
         "id": "fx_move",
+        "short_name": "FX move",
         "name": "Large FX move",
         "description": "The dollar falls 10% against other currencies.",
         "shocks": {"dollar": -0.10},
@@ -82,6 +87,7 @@ SCENARIOS = [
     },
     {
         "id": "correlation_spike",
+        "short_name": "Correlation spike",
         "name": "Correlations rise",
         "description": "Every pairwise correlation rises to at least 0.8 and the portfolio has a bad ten days.",
         "correlation_floor": 0.8,

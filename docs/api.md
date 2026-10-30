@@ -200,14 +200,14 @@ the quote currency), `weight`, `value` (in the base currency), `last_price`
 One entry per scenario in `risk/config.py`, in that order.
 
 ```json
-{"id": "market_crash", "name": "Market crash",
+{"id": "market_crash", "name": "Market crash", "short_name": "Market crash",
  "description": "The equity market falls 20% with rates and the dollar unchanged.",
  "method": "factor", "shocks": {"market": -0.2},
  "portfolio_loss_pct": -0.214, "portfolio_loss_value": -21404.0,
  "positions": [{"ticker": "NVDA", "weight": 0.2, "move_pct": -0.41, "loss_pct": -0.081, "share_of_loss": 0.37}, ...]}
 ```
 
-`positions` is sorted worst first. `move_pct` is the estimated move of the
+`short_name` is a compact label for charts. `positions` is sorted worst first. `move_pct` is the estimated move of the
 position itself, `loss_pct` is weight times move and the sum of `loss_pct`
 equals `portfolio_loss_pct`. `share_of_loss` is the position's part of the
 gross loss (the sum over losing positions), so the shares of the losers sum to
