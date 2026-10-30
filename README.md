@@ -37,7 +37,8 @@ takes about a minute.
 
 The book is built in an editor: search for a company, set weights with a
 slider or enter share counts, and see each position's share of the book as it
-changes. Sample books are included and the last book is remembered.
+changes. Sample books are included and the last book is remembered. The page
+has a light and a dark mode, and follows the system setting until you pick one.
 
 Books in several currencies are measured in a chosen base currency with daily
 FX rates. The method behind every number is in

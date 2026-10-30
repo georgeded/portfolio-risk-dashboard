@@ -5,6 +5,9 @@ var RiskDashboard = (function () {
     green: '#16a34a', amber: '#f59e0b', orange: '#ea580c', danger: '#dc2626', blue: '#2a78d6',
     neutral: '#f0efec'
   }
+  C.tip = '#111827'
+  var LIGHT = Object.assign({}, C)
+  var DARK = { red: '#e0483f', ink: '#e5e7eb', line: '#262a31', grey: '#6b7280', greyDark: '#9ca3af', neutral: '#2b2f36', tip: '#374151' }
   var LEVELS = { Low: C.green, Moderate: C.amber, High: C.orange, 'Very High': C.danger }
   var LEVEL_PILL = { Low: 'green', Moderate: 'amber', High: 'orange', 'Very High': 'red' }
   var charts = {}
@@ -48,7 +51,7 @@ var RiskDashboard = (function () {
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 250 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: C.ink, titleFont: { weight: '700' }, padding: 10, cornerRadius: 8 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: C.tip, titleFont: { weight: '700' }, padding: 10, cornerRadius: 8 } },
       scales: {
         x: { grid: { color: C.line, lineWidth: 1, drawTicks: false }, border: { display: false }, ticks: { color: C.greyDark, font: { size: 11 } } },
         y: { grid: { color: C.line, lineWidth: 1, drawTicks: false }, border: { display: false }, ticks: { color: C.greyDark, font: { size: 11 } } }
@@ -357,6 +360,21 @@ var RiskDashboard = (function () {
     el('rd-body').classList.remove('rd-loading')
   }
 
+  // Errors arrive as JSON from the API, but as plain text or HTML from the host while it starts up.
+  function readJson(res) {
+    return res.text().then(function (text) {
+      var body
+      try { body = JSON.parse(text) } catch (e) { body = null }
+      if (!res.ok) {
+        var detail = body && body.detail
+        if (Array.isArray(detail)) detail = detail.map(function (d) { return d.msg }).join('; ')
+        throw new Error(detail || (res.status >= 502 ? 'The server is starting up. Try again in a minute.' : 'Request failed (HTTP ' + res.status + ').'))
+      }
+      if (!body) throw new Error('Unexpected response from the server.')
+      return body
+    })
+  }
+
   function showError(msg) {
     var box = el('rd-error')
     box.textContent = msg
@@ -372,16 +390,13 @@ var RiskDashboard = (function () {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request)
     }).then(function (res) {
-      return res.json().then(function (body) {
-        if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail))
-        return body
-      })
+      return readJson(res)
     }).then(function (report) {
       render(report)
       return report
     }).catch(function (err) {
+      // Leave the previous results dimmed so they are not mistaken for this book.
       showError(err.message)
-      el('rd-body').classList.remove('rd-loading')
       throw err
     }).finally(function () {
       el('rd-run').disabled = false
@@ -423,8 +438,11 @@ var RiskDashboard = (function () {
     if (!ticker || lookups[key]) return
     lookups[key] = { status: 'checking' }
     fetch(state.apiBase + '/api/lookup/' + encodeURIComponent(ticker) + '?base=' + el('rd-currency').value).then(function (res) {
-      return res.json().then(function (body) {
-        lookups[key] = res.ok ? { status: 'ok', info: body } : { status: 'missing', message: body.detail }
+      return readJson(res).then(function (body) {
+        lookups[key] = { status: 'ok', info: body }
+      }, function (err) {
+        if (res.status >= 500) throw err
+        lookups[key] = { status: 'missing', message: err.message }
       })
     }).catch(function () {
       delete lookups[key]
@@ -613,7 +631,18 @@ var RiskDashboard = (function () {
     }
   }
 
+  function useTheme(name, save) {
+    document.documentElement.dataset.theme = name
+    Object.assign(C, LIGHT, name === 'dark' ? DARK : {})
+    if (save) try { localStorage.setItem('rd-theme', name) } catch (e) {}
+  }
+
   function init(opts) {
+    useTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+    el('rd-theme').addEventListener('click', function () {
+      useTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true)
+      if (state.report) render(state.report)
+    })
     state.apiBase = (opts && opts.apiBase) || ''
     book = restoreBook()
     wireBook()
